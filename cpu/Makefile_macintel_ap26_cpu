@@ -1,0 +1,60 @@
+#
+# Mac AP26 CPU makefile - Bill Michael May 10 2019
+#
+# Must have AP26 master source folder in same directory as boinc-master folder
+#  critical path assignment is to the boinc-master folder BOINC__DIR
+# Must have alias to MacOSX10.6.sdk in same folder as this makefile and source code
+#   if using a specific OSX target release (CFLAGS)
+# Must copy config.h from boinc-master/clientgui/mac to this same folder
+# make -B -f makefile_macintel_ap26_cpu
+#
+
+CC = g++
+#CC = MACOSX_DEPLOYMENT_TARGET=10.7 gcc (or just gcc)
+LD = $(CC)
+
+APP = ap26_cpu_macintel64
+
+SRC = AP26.cpp
+OBJ = AP26.o cpuavx512.o cpuavx2.o cpuavx.o cpusse41.o cpusse2.o
+
+BOINC_DIR = /Volumes/Beta\ Testing/Users/testing/Documents/boinc-master
+
+# (BM) ../../../boinc_707
+
+BOINC_INC = -I$(BOINC_DIR)/api -I$(BOINC_DIR)/lib -I$(BOINC_DIR)
+BOINC_LIB = -L$(BOINC_DIR)/mac_build/build/Development/ -lboinc -lboinc_api -lstdc++
+
+#-stdlib=libc++
+
+DFLAGS  = -DAP26_BOINC -DAP26_CPU
+#CFLAGS  = -Wa,-q -I . -O3 -arch x86_64 -isysroot MacOSX10.6.sdk -mmacosx-version-min=10.7
+CFLAGS  = -I . -O3 -arch x86_64
+LDFLAGS = $(CFLAGS)
+
+all : $(APP) 
+
+$(APP) : $(OBJ)
+	$(LD) $(LDFLAGS) $(BOINC_LIB) -o $@ $^
+
+AP26.o : $(SRC)
+	$(CC) $(DFLAGS) $(CFLAGS) $(BOINC_INC) -c -o $@ AP26.cpp
+
+cpuavx512.o : cpuavx512.cpp
+	$(CC) $(DFLAGS) $(CFLAGS) -mavx512dq -c -o $@ $^
+
+cpuavx2.o : cpuavx2.cpp
+	$(CC) $(DFLAGS) $(CFLAGS) -mavx2 -c -o $@ $^
+
+cpuavx.o : cpuavx.cpp
+	$(CC) $(DFLAGS) $(CFLAGS) -mavx -c -o $@ $^
+
+cpusse41.o : cpusse41.cpp
+	$(CC) $(DFLAGS) $(CFLAGS) -msse4.1 -c -o $@ $^
+
+cpusse2.o : cpusse2.cpp
+	$(CC) $(DFLAGS) $(CFLAGS) -msse2 -c -o $@ $^
+
+clean :
+	rm -f *.o $(APP)
+

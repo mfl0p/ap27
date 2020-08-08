@@ -1,0 +1,52 @@
+#
+# Mac AP26 OpenCL makefile - Bill Michael May 10 2019
+#
+# Must have AP26 master source folder in same directory as boinc-master folder
+#  critical path assignment is to the boinc-master folder BOINC__DIR
+# Must have alias to MacOSX10.8.sdk in same folder as this makefile and source code
+#   if using a specific OSX target release (CFLAGS)
+# Must copy config.h from boinc-master/clientgui/mac to this same folder
+# make -B -f makefile_macintel_ap26_opencl
+#
+
+CC = clang++
+LD = $(CC)
+
+.SUFFIXES:
+.SUFFIXES: .o .c .h .cl .cpp
+
+APP = ap26_opencl_macintel64
+
+SRC = AP26.cpp simpleCL.c CONST.H prime.h simpleCL.h kernels/checkn.cl kernels/offset.cl kernels/setupok.cl kernels/setupokok.cl kernels/sieve.cl kernels/sieve_nv.cl kernels/setupn.cl kernels/clearn.cl kernels/clearok.cl kernels/clearokok.cl
+
+KERNEL_HEADERS = kernels/checkn.h kernels/offset.h kernels/setupok.h kernels/setupokok.h kernels/sieve.h kernels/sieve_nv.h kernels/setupn.h cl.h kernels/clearn.h kernels/clearok.h kernels/clearokok.h
+
+OBJ = AP26.o simpleCL.o
+
+BOINC_DIR = /Volumes/Beta\ Testing/Users/testing/Documents/boinc-master
+
+BOINC_INC = -I$(BOINC_DIR)/api -I$(BOINC_DIR)/lib -I$(BOINC_DIR)
+
+BOINC_LIB = -L$(BOINC_DIR)/mac_build/build/Development/ -lboinc -lboinc_api -lboinc_opencl -lstdc++
+
+DFLAGS  = -DAP26_BOINC -DAP26_OPENCL
+CFLAGS  = -I . -I kernels -O3 -arch x86_64
+LDFLAGS = $(CFLAGS)
+
+all : $(APP)
+
+$(APP) : $(OBJ)
+	$(LD) $(LDFLAGS) $(BOINC_LIB) -framework OpenCL -o $@ $^
+
+AP26.o : $(SRC) $(KERNEL_HEADERS)
+	$(CC) $(DFLAGS) $(CFLAGS) $(BOINC_INC) -c -o $@ AP26.cpp
+
+simpleCL.o : $(SRC)
+	$(CC) $(DFLAGS) $(CFLAGS) $(BOINC_INC) -c -o $@ simpleCL.c
+
+.cl.h:
+	./cltoh.pl $< > $@
+
+clean :
+	rm -f *.o kernels/*.h $(APP)
+
