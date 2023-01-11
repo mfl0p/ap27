@@ -474,8 +474,6 @@ cl_kernel _sclCreateKernel( sclSoft software ) {
 }
 
 
-// Bryan Little - not using events.. and 3D workgroup sizes
-
 void sclEnqueueKernel( sclHard hardware, sclSoft software) {
 
 	cl_int err;
@@ -486,6 +484,23 @@ void sclEnqueueKernel( sclHard hardware, sclSoft software) {
 		fprintf(stderr, "\nError on EnqueueKernel %s", software.kernelName );
 		sclPrintErrorFlags(err); 
 	}
+		
+}
+
+
+cl_event sclEnqueueKernelEvent( sclHard hardware, sclSoft software) {
+
+	cl_event myEvent;
+	cl_int err;
+
+	err = clEnqueueNDRangeKernel( hardware.queue, software.kernel, 3, NULL, software.global_size, software.local_size, 0, NULL, &myEvent );
+	if ( err != CL_SUCCESS ) {
+		printf( "\nError on EnqueueKernel %s", software.kernelName );
+		fprintf(stderr, "\nError on EnqueueKernel %s", software.kernelName );
+		sclPrintErrorFlags(err); 
+	}
+
+	return myEvent;
 		
 }
 
@@ -598,7 +613,30 @@ sclSoft sclGetCLSoftware( const char* source, const char* name, sclHard hardware
    	 ############################################ */
 	// Bryan Little
    	_sclBuildProgram( software.program, hardware.device, name, opt );
+
+/*
+	// Query binary (PTX file) size
+	size_t bin_sz;
+	clGetProgramInfo(software.program, CL_PROGRAM_BINARY_SIZES, sizeof(size_t), &bin_sz, NULL);
+
+	// Read binary (PTX file) to memory buffer
+	unsigned char *bin = (unsigned char *)malloc(bin_sz);
+	clGetProgramInfo(software.program, CL_PROGRAM_BINARIES, sizeof(unsigned char *), &bin, NULL);
+
+	// Save PTX to add_vectors_ocl.ptx
+	FILE *fp = fopen("sieve.ptx", "wb");
+	fwrite(bin, sizeof(char), bin_sz, fp);
+	fclose(fp);
+	free(bin);
+*/
+
+
+
    	/* ############################################ */
+
+
+
+
    	
    	/* Create the kernel object
 	 ########################################################################## */

@@ -2,32 +2,35 @@
 
 	sieve kernel
 
+
+	fast 32 bit mod fails at approximately 2^54 which will never be reached
+	because n59 does not exceed 2^48
+
 */
 
 
-#define halfn59s 68687660
-#define MOD 258559632607830L
+__kernel void sieve(__global ulong * n59g, ulong S59, int shift, __global ulong * n_result, __global ulong * OKOK, __global int * counter, int offset){
 
-
-__kernel void sieve(__global long *n59, long S59, int shift, __global long *n_result, __global long *OKOK, __global int *counter, int offset){
+	const int halfn59s = 68687660;
+	const ulong MOD = 258559632607830UL;
 
 	int idx = get_global_id(0) + offset;
 
 	if(idx < halfn59s){
 
-		long sito;
-		long n59_local = n59[idx];
+		ulong sito;
+		ulong n59 = n59g[idx];
 
 		int i59;
 		for(i59=0;i59<35;i59++){
-			int n59a=n59_local&((1<<30)-1);
-			int n59b=n59_local>>30;
+			uint n59a = n59 & ((1<<30)-1);
+			uint n59b = n59 >> 30;
 
-			if(sito  = OKOK[ (n59a+60*n59b)%61 ]
+			if((sito  = OKOK[ (n59a+60*n59b)%61 ]
 				& OKOK[ ((n59a+25*n59b)%67) + 61 ]
 				& OKOK[ ((n59a+20*n59b)%71) + 128 ]
 				& OKOK[ ((n59a+8*n59b)%73) + 199 ]
-				& OKOK[ ((n59a+52*n59b)%79) + 272 ] )
+				& OKOK[ ((n59a+52*n59b)%79) + 272 ]) )
 			if(sito &= OKOK[ ((n59a+40*n59b)%83) + 351 ]
 				& OKOK[ ((n59a+78*n59b)%89) + 434 ]
 				& OKOK[ ((n59a+33*n59b)%97) + 523 ]
@@ -106,41 +109,35 @@ __kernel void sieve(__global long *n59, long S59, int shift, __global long *n_re
 				& OKOK[ ((n59a+420*n59b)%521) + 22108 ])
 			if(sito &= OKOK[ ((n59a+335*n59b)%523) + 22629 ]
 				& OKOK[ ((n59a+189*n59b)%541) + 23152 ]){
-				int b;
-				int bLimit, bStart;
 
-				bLimit = 63 - clz(sito);
-				bStart = 63 - clz(sito&-sito);	// this is ctz
 
-				for (b = bStart; b <= bLimit; b++){
-					if((sito>>b)&1){
+				if(popcount(sito) == 1){
+					int setbit = 63 - clz(sito);
+					ulong n=n59+(setbit+shift)*MOD;
 
-						int na, nb, nc, tmp1, tmp2;
-						long n=n59_local+(b+shift)*MOD;
+					if(n%7 && n%11 && n%13 && n%17 && n%19 && n%23){
+						n_result[atomic_add(&counter[0], 1)] = n;
+					}
+				}
+				else{  // more than 1 set bit
+					do{
+						int setbit = 63 - clz(sito);
+						ulong n=n59+(setbit+shift)*MOD;
 
-						// na - lowest 29 bits of n
-						// nb - next 17 bits
-						// nc - the remaining highest bits
-
-						na=((int)n)&((1<<29)-1);
-						nb=((int)(n>>29))&((1<<17)-1);
-						nc=((int)(n>>46));
-
-						tmp1=na+151*nb+625*nc; // suitable for 7, 17, 23
-						tmp2=na+2580*nb+2506*nc; // suitable for 11, 13, 19
-
-						if(tmp1%7 && tmp2%11 && tmp2%13 && tmp1%17 && tmp2%19 && tmp1%23){
+						if(n%7 && n%11 && n%13 && n%17 && n%19 && n%23){
 							n_result[atomic_add(&counter[0], 1)] = n;
 						}
-
+						
+						sito ^= 1UL << setbit; // toggle bit off
 					}
+					while(popcount(sito));
 				}
 			}
 
 
-			n59_local+=S59;
-			if(n59_local>= MOD ){
-				n59_local-= MOD;
+			n59+=S59;
+			if(n59>= MOD ){
+				n59-= MOD;
 			}
 
 		}

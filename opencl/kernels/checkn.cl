@@ -1,208 +1,167 @@
-/* PrimeQ -- Geoffrey Reynolds, September 11 2008.
-
-   See http://www.math.uni.wroc.pl/~jwr/AP26/AP26.zip for the sample
-   implementation containing the rest of the source required.
-
-   See http://www.math.uni.wroc.pl/~jwr/AP26/AP26v3.pdf for information
-   about how the algorithm works and for the copyleft notice.
-
-   PrimeQ(N) is limited to N < 2^63 - 1. This is adequate for the AP26 search.
-
-
-	***************
-	Bryan Little 
-	April 2020 removed mulmod function
-	May 2014 OpenCL conversion - checkn.cl
-
+/* 
+	checkn.cl
+	tests primality of each term of the AP sequence
+	test is good to 2^64-1
 
 */
 
 
 
-/* Returns 0 only if N is composite.
-   Otherwise N is a strong probable prime to base 2.
-   For AP26, N can be assumed to have no prime divisors <= 541?
- */
-int strong_prp(ulong N)
+// r0 + 2^64 * r1 = a * b
+inline ulong2 mul_wide(const ulong a, const ulong b)
 {
-	ulong magic, shift, r, d;
-	int s, t;
-	ulong a = 2; // prp to base a
-	ulong ab0, ab1, mab01, mab10, mab11;
-	ulong res, s0, s1, tt;
-	int retval = 0;
+	ulong2 r;
 
-	/* getMagic */
-	ulong two63 = 0x8000000000000000;
-	ulong p = 63;
-	ulong q2 = two63/N;
-	ulong r2 = two63 - (q2 * N);
-	ulong anc = two63 - 1 - r2;
-	ulong q1 = two63/anc;
-	ulong r1 = two63 - (q1 * anc);
-	ulong delta;
+#ifdef __NV_CL_C_VERSION
+	const uint a0 = (uint)(a), a1 = (uint)(a >> 32);
+	const uint b0 = (uint)(b), b1 = (uint)(b >> 32);
 
-	do {
-		++p;
-		q1 = 2*q1;
-		r1 = 2*r1; 
-		q2 = 2*q2;
-		r2 = 2*r2;
-		if (r1 >= anc) {
-			++q1;
-			r1-=anc;
-      		}
-		if (r2 >= N) {
-			++q2;
-			r2-=N;
-      		}
-		delta = N - r2;
-   	} while (q1 < delta || (q1 == delta && r1 == 0));
+	uint c0 = a0 * b0, c1 = mul_hi(a0, b0), c2, c3;
 
-	shift = p - 64;
-	magic = q2 + 1;
-	/* end getMagic */
+	asm volatile ("mad.lo.cc.u32 %0, %1, %2, %3;" : "=r" (c1) : "r" (a0), "r" (b1), "r" (c1));
+	asm volatile ("madc.hi.u32 %0, %1, %2, 0;" : "=r" (c2) : "r" (a0), "r" (b1));
 
-	d = N >> 1;
-	t = 1;
+	asm volatile ("mad.lo.cc.u32 %0, %1, %2, %3;" : "=r" (c2) : "r" (a1), "r" (b1), "r" (c2));
+	asm volatile ("madc.hi.u32 %0, %1, %2, 0;" : "=r" (c3) : "r" (a1), "r" (b1));
 
-	while( !(d & 1) ){
-		d >>= 1;
-		++t;
-	}
+	asm volatile ("mad.lo.cc.u32 %0, %1, %2, %3;" : "=r" (c1) : "r" (a1), "r" (b0), "r" (c1));
+	asm volatile ("madc.hi.cc.u32 %0, %1, %2, %3;" : "=r" (c2) : "r" (a1), "r" (b0), "r" (c2));
+	asm volatile ("addc.u32 %0, %1, 0;" : "=r" (c3) : "r" (c3));
 
-	r = a;
-	d >>= 1;
+	r.s0 = upsample(c1, c0); r.s1 = upsample(c3, c2);
+#else
+	r.s0 = a * b; r.s1 = mul_hi(a, b);
+#endif
+
+	return r;
+}
+
+
+inline ulong invert(ulong p)
+{
+	ulong p_inv = 1, prev = 0;
+	while (p_inv != prev) { prev = p_inv; p_inv *= 2 - p * p_inv; }
+	return p_inv;
+}
+
+
+inline ulong montMul(ulong a, ulong b, ulong p, ulong q)
+{
+	ulong2 ab = mul_wide(a,b);
+
+	ulong m = ab.s0 * q;
+
+	ulong mp = mul_hi(m,p);
+
+	ulong r = ab.s1 - mp;
+
+	return ( ab.s1 < mp ) ? r + p : r;
+}
+
+
+inline ulong add(ulong a, ulong b, ulong p)
+{
+	ulong r;
+
+	ulong c = (a >= p - b) ? p : 0;
+
+	r = a + b - c;
+
+	return r;
+}
+
+// strong probable prime to base 2
+inline bool strong_prp(ulong N)
+{
+	ulong nmo = N-1;
+	int t = 63 - clz(nmo & -nmo);	// this is ctz
+	ulong exp = N >> t;
+	ulong curBit = 0x8000000000000000;
+	curBit >>= ( clz(exp) + 1 );
+
+	ulong q = invert(N);
+	ulong one = (-N) % N;
+	ulong a = add(one, one, N); // two, in montgomery form
+	nmo = N - one;  // N-1 in montgomery form
+
+	/* If N is prime and N = d*2^t+1, where d is odd, then either
+		1.  a^d = 1 (mod N), or
+		2.  a^(d*2^s) = -1 (mod N) for some s in 0 <= s < t    */
 
   	/* r <-- a^d mod N, assuming d odd */
-	while( d > 0 )
+	while( curBit )
 	{
-		// a = mulmod(a,a,N,magic,shift);
-		ab1 = mul_hi(a,a);
-		ab0 = a*a;
-		mab01 = mul_hi(magic,ab0);
-		mab10 = magic * ab1;
-		mab11 = mul_hi(magic,ab1);
+		a = montMul(a,a,N,q);
 
-		s0 = mab01 + mab10;
-		s1 = mab11 + (s0 < mab01);
-		tt = (s0 >> shift) | (s1 << (64-shift));
-
-		res = ab0 - tt * N;
-
-		if((long)res < 0)
-			res += N;
-	  
-		a = res;
-		// end mulmod
-
-		if(d & 1){
-
-			// r = mulmod(r,a,N,magic,shift);
-			ab1 = mul_hi(r,a);
-			ab0 = r*a;
-			mab01 = mul_hi(magic,ab0);
-			mab10 = magic * ab1;
-			mab11 = mul_hi(magic,ab1);
-
-			s0 = mab01 + mab10;
-			s1 = mab11 + (s0 < mab01);
-			tt = (s0 >> shift) | (s1 << (64-shift));
-
-			res = ab0 - tt * N;
-
-			if((long)res < 0)
-				res += N;
-		  
-			r = res;
-			// end mulmod
+		if(exp & curBit){
+			a = add(a,a,N);
 		}
 
-		d >>= 1;
+		curBit >>= 1;
 	}
 
 	/* Clause 1. and s = 0 case for clause 2. */
-	if (r == 1 || r == N-1){
-		retval = 1;
+	if (a == one || a == nmo){
+		return true;
 	}
 
 	/* 0 < s < t cases for clause 2. */
-	for (s = 1; !retval && s < t; ++s){
+	for (int s = 1; s < t; ++s){
 
-		// r = mulmod(r,r,N,magic,shift);
-		ab1 = mul_hi(r,r);
-		ab0 = r*r;
-		mab01 = mul_hi(magic,ab0);
-		mab10 = magic * ab1;
-		mab11 = mul_hi(magic,ab1);
+		a = montMul(a,a,N,q);
 
-		s0 = mab01 + mab10;
-		s1 = mab11 + (s0 < mab01);
-		tt = (s0 >> shift) | (s1 << (64-shift));
-
-		res = ab0 - tt * N;
-
-		if((long)res < 0)
-			res += N;
-	  
-		r = res;
-		// end mulmod
-
-		if(r == N-1){
-	    		retval = 1;
+		if(a == nmo){
+	    		return true;
 		}
 	}
 
-	return retval;
+
+	return false;
 }
+
 
 
 /*
 	main prime sequence checking kernel
 */
-__kernel void checkn(__global long *n_result, long STEP, __global int *sol_k, __global long *sol_val, __global int *counter){
+__kernel void checkn(__global ulong * n_result, ulong STEP, __global int * sol_k, __global ulong * sol_val, __global int * counter){
 
-	int i = get_global_id(0);
+	int gid = get_global_id(0);
 
-	if(i<counter[0]){
+	if(gid < counter[0]){
 
-		long n = n_result[i];
-		long m = n+STEP*5;
-		int forward = 1;
-		int backward = 1;
+		ulong n = n_result[gid];
+
+		ulong m = n + STEP*5;
+
+		if(m < n){  // overflowed ulong, hit software limit
+			atomic_or(&counter[3], 1);
+		}
+
 		int k=0;
 
-		while(forward || backward){
-
-			if(strong_prp( (ulong)m )){
-				if(forward){
-					m+=STEP;
-				}
-				else{
-					m-=STEP;
-					if(m<=0){
-						backward=0;
-					}
-				}
-				k++;
-			}
-			else{
-				if(forward){
-					forward=0;
-					if(k>=10){
-						m=n+STEP*4;
-					}
-					else{
-						backward=0;
-					}
-				}
-				else{
-					backward=0;
-				}
+		// forward
+		while(strong_prp( m )){
+			m += STEP;
+			++k;
+			if(m < n){  // overflowed ulong, hit software limit
+				atomic_or(&counter[3], 1);
+				break;
 			}
 		}
 
-		if(k>=10){
+		if(k >= 10){
+			m = n + STEP*4;
+			ulong start = m;
+
+			// reverse
+			while(strong_prp( m )){
+				m -= STEP;
+				++k;
+				if(m > start)break;  // m < 0
+			}
+
+			// AP length >= 10 store to results
 			int index = atomic_add(&counter[2], 1);
 			sol_k[index] = k;
 			sol_val[index] = m+STEP;
@@ -211,7 +170,7 @@ __kernel void checkn(__global long *n_result, long STEP, __global int *sol_k, __
 	}
 
 	// store largest ncount
-	if(i == 0){
+	if(gid == 0){
 		int nc = counter[0];
 		if(nc > counter[1]){
 			counter[1] = nc;

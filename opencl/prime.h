@@ -1,119 +1,110 @@
-/* 
-   prime.h -- Bryan Little 2-25-2020
-   using GCC 64bit __int128
-
-
-   PrimeQ_gen.h -- Geoffrey Reynolds, August 2009.
-
-   This is an adaptation of Mark Rodenkirch's PPC64 mulmod code using
-   only plain integer arithmetic available in C99.
-
+/*
+	tests primality of each term of the AP sequence
+	test is good to 2^64-1
 */
 
-/* a*b mod p
-   Assumes a,b < p < 2^63
-*/
-static uint64_t mulmod(uint64_t a, uint64_t b, uint64_t p, uint64_t magic, uint64_t shift)
+
+uint64_t invert(uint64_t p)
 {
-	uint64_t ab0, ab1, mab00, mab01, mab10, mab11;
-	uint64_t r, s0, s1, t;
+	uint64_t p_inv = 1, prev = 0;
+	while (p_inv != prev) { prev = p_inv; p_inv *= 2 - p * p_inv; }
+	return p_inv;
+}
+
+
+uint64_t montMul(uint64_t a, uint64_t b, uint64_t p, uint64_t q)
+{
 	unsigned __int128 res;
 
-	res = (unsigned __int128)a * b;
-	ab0 = (uint64_t)res;
-	ab1 = res >> 64;
+	res  = (unsigned __int128)a * b;
+	uint64_t ab0 = (uint64_t)res;
+	uint64_t ab1 = res >> 64;
 
-	res = (unsigned __int128)magic * ab0;
-	mab00 = (uint64_t)res;
-	mab01 = res >> 64;
+	uint64_t m = ab0 * q;
 
-	res = (unsigned __int128)magic * ab1;
-	mab10 = (uint64_t)res;
-	mab11 = res >> 64;
+	res = (unsigned __int128)m * p;
+	uint64_t mp = res >> 64;
+
+	uint64_t r = ab1 - mp;
+
+	return ( ab1 < mp ) ? r + p : r;
+}
 
 
-	s0 = mab01 + mab10;
-	s1 = mab11 + (s0 < mab01);
+uint64_t add(uint64_t a, uint64_t b, uint64_t p)
+{
+	uint64_t r;
 
-	t = (s0 >> shift) | (s1 << (64-shift));
+	uint64_t c = (a >= p - b) ? p : 0;
 
-	r = ab0 - t*p;
-
-	if ((int64_t)r < 0)
-		r += p;
+	r = a + b - c;
 
 	return r;
 }
 
 
-/* Returns 0 only if N is composite.
-   Otherwise N is a strong probable prime to base a.
- */
-static int strong_prp(uint64_t a, uint64_t N)
+// initialize montgomery constants
+void mont_init(uint64_t N, int & t, uint64_t & curBit, uint64_t & exp, uint64_t & nmo, uint64_t & q, uint64_t & one, uint64_t & r2){
+
+
+	nmo = N-1;
+	t = __builtin_ctzll(nmo);
+	exp = N >> t;
+	curBit = 0x8000000000000000;
+	curBit >>= ( __builtin_clzll(exp) + 1 );
+	q = invert(N);
+	one = (-N) % N;
+	nmo = N - one;
+	uint64_t two = add(one, one, N);
+	r2 = add(two, two, N);
+	for (int i = 0; i < 5; ++i)
+		r2 = montMul(r2, r2, N, q);	// 4^{2^5} = 2^64
+
+}
+
+
+bool strong_prp(int base, uint64_t N, int t, uint64_t curBit, uint64_t exp, uint64_t nmo, uint64_t q, uint64_t one, uint64_t r2)
 {
-	uint64_t r, d, magic, shift;
-	uint32_t s, t;
-
-	/* getMagic */
-	uint64_t two63 = 0x8000000000000000;
-	uint64_t p = 63;
-	uint64_t q2 = two63/N;
-	uint64_t r2 = two63 - (q2 * N);
-	uint64_t anc = two63 - 1 - r2;
-	uint64_t q1 = two63/anc;
-	uint64_t r1 = two63 - (q1 * anc);
-	uint64_t delta;
-
-	do {
-		++p;
-		q1 = 2*q1;
-		r1 = 2*r1; 
-		q2 = 2*q2;
-		r2 = 2*r2;
-		if (r1 >= anc) {
-			++q1;
-			r1-=anc;
-      		}
-		if (r2 >= N) {
-			++q2;
-			r2-=N;
-      		}
-		delta = N - r2;
-   	} while (q1 < delta || (q1 == delta && r1 == 0));
-
-	shift = p - 64;
-	magic = q2 + 1;
-	/* end getMagic */
-
 
 	/* If N is prime and N = d*2^t+1, where d is odd, then either
 		1.  a^d = 1 (mod N), or
 		2.  a^(d*2^s) = -1 (mod N) for some s in 0 <= s < t    */
 
-#ifdef __GNUC__
-	t = __builtin_ctzll(N-1);
-	d = N >> t;
-#else
-	for (d = N >> 1, t = 1; !(d & 1); d >>= 1, ++t);
-#endif
 
-	/* r <-- a^d mod N, assuming d odd */
-	for (r = a, d >>= 1; d > 0; d >>= 1){
-		a = mulmod(a,a,N,magic,shift);
-		if (d & 1)
-			r = mulmod(r,a,N,magic,shift);
+	uint64_t a = base;
+	uint64_t mbase = montMul(a,r2,N,q);  // convert base to montgomery form
+
+	a = mbase;
+
+  	/* r <-- a^d mod N, assuming d odd */
+	while( curBit )
+	{
+		a = montMul(a,a,N,q);
+
+		if(exp & curBit){
+			a = montMul(a,mbase,N,q);
+		}
+
+		curBit >>= 1;
 	}
 
 	/* Clause 1. and s = 0 case for clause 2. */
-	if (r == 1 || r == N-1)
-		return 1;
+	if (a == one || a == nmo){
+		return true;
+	}
 
 	/* 0 < s < t cases for clause 2. */
-	for (s = 1; s < t; ++s)
-		if ((r = mulmod(r,r,N,magic,shift)) == N-1)
-			return 1;
+	for (int s = 1; s < t; ++s){
 
-	return 0;
+		a = montMul(a,a,N,q);
+
+		if(a == nmo){
+	    		return true;
+		}
+	}
+
+
+	return false;
 }
 
 

@@ -4,7 +4,6 @@
 
 */
 
-#define MOD 258559632607830L
 
 #define DO_OKOK(_X) \
 	if(i<_X) \
@@ -13,9 +12,10 @@
 		}
 
 
-__kernel void setupokok(int shift, __global char *OK, __global long *OKOK, __global int *offset){
+__kernel void setupokok(int shift, __global char *OK, __global ulong *OKOK, __global int *offset){
 
 
+	const ulong MOD = 258559632607830UL;
 	int i = get_global_id(0);
 	int jj;
 

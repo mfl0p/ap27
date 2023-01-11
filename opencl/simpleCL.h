@@ -94,8 +94,8 @@ void 			sclPrintErrorFlags( cl_int flag );
 /* ######################################################## */
 
 /* ####### Device execution ############################### */
-
 void			sclEnqueueKernel( sclHard hardware, sclSoft software );
+cl_event		sclEnqueueKernelEvent( sclHard hardware, sclSoft software );
 double			ProfilesclEnqueueKernel( sclHard hardware, sclSoft software );
 
 /* ######################################################## */

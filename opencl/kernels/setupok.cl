@@ -11,7 +11,7 @@
 		OK[ ((i*(step%_X))%_X) + offset[_X] ]=0;
 
 
-__kernel void setupok(long step, __global char *OK, __global int *offset){
+__kernel void setupok(ulong step, __global char *OK, __global int *offset){
 
 
 	int i = get_global_id(0);

@@ -1,19 +1,14 @@
 /*
-
 	setup n59s on GPU kernel
-
-	Bryan Little 1-24-2019
-	moved from cpu to gpu also greatly reduces host RAM use.  Same VRAM usage.
 
 */
 
-#define MOD 258559632607830L
 
-__kernel void setupn(__global long *n43_d, __global long *n59_0, __global long *n59_1, long S53, long S47, long S43){
+__kernel void setupn(__global ulong *n43_d, __global ulong *n59_0, __global ulong *n59_1, ulong S53, ulong S47, ulong S43){
 
-
+	const ulong MOD = 258559632607830UL;
 	int i = get_global_id(0);
-	long n43, n47, n53;
+	ulong n43, n47, n53;
 	int i43, i47, i53;
 	int count;
 

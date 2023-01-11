@@ -24,6 +24,7 @@ __kernel void clearok(__global char *OK, __global int *counter){
 	if (i == 0){
 		counter[1] = 0; // largest n count
 		counter[2] = 0; // solutions
+		counter[3] = 0; // PRP kernel overflow flag
 	}
 
 }

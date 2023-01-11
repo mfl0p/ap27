@@ -1,12 +1,13 @@
 /* 
 	AP26 GPU OpenCL application
  	Bryan Little
- 	March 22, 2020				*/
+	with contributions by Yves Gallot
+ 	Jan 10, 2023				*/
 
 
 // AP26 application version
-#define MAJORV 3
-#define MINORV 1
+#define MAJORV 4
+#define MINORV 0
 #define SUFFIXV ""
 
 
@@ -47,16 +48,8 @@
 #define numOK 23693
 #define sol 10240
 
-#define GPU_INTEL 3
-#define GPU_AMD 2
-#define GPU_NVIDIA 1
-#define GPU_GENERIC 0
-
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
-
-// a bit less than 32bit signed int max
-#define MAXINTV 2000000000
 
 #define STATE_FILENAME_A "AP26-state.a.txt"
 #define STATE_FILENAME_B "AP26-state.b.txt"
@@ -64,13 +57,16 @@
 
 #define MINIMUM_AP_LENGTH_TO_REPORT 20
 
+// smaller than 32bit signed int max
+#define MAXINTV 2000000000
 
 
 /* Global variables */
-static int KMIN, KMAX, K_DONE, K_COUNT;
-int result_hash;
+int KMIN, KMAX, K_DONE, K_COUNT;
+uint32_t totalaps;
 bool write_state_a_next;
 uint32_t numn;
+uint32_t cksum;
 
 sclHard hardware;
 
@@ -84,8 +80,8 @@ sclSoft clearok;
 sclSoft clearokok;
 sclSoft clearn;
 
-int64_t *n43_h;
-int64_t *sol_val_h;
+uint64_t *n43_h;
+uint64_t *sol_val_h;
 int *sol_k_h;
 int *counter_h;
 cl_mem n_result_d = NULL;
@@ -100,7 +96,7 @@ cl_mem n59_0_d = NULL;
 cl_mem n59_1_d = NULL;
 
 
-static FILE *results_file = NULL;
+FILE *results_file = NULL;
 
 // bryan little
 // added boinc restart on gpu malloc error
@@ -121,12 +117,12 @@ cl_mem sclMalloc( sclHard hardware, cl_int mode, size_t size ){
 }
 
 
-static FILE *my_fopen(const char *filename, const char *mode)
+FILE *my_fopen(const char *filename, const char *mode)
 {
-  char resolved_name[512];
+	char resolved_name[512];
 
-  boinc_resolve_filename(filename,resolved_name,sizeof(resolved_name));
-  return boinc_fopen(resolved_name,mode);
+	boinc_resolve_filename(filename,resolved_name,sizeof(resolved_name));
+	return boinc_fopen(resolved_name,mode);
 }
 
 
@@ -141,45 +137,37 @@ void Progress(double prog){
 }
 
 
-// Bryan Little 6-9-2016
-// BOINC result hash calculation, write to solution file, and close.
-// The hash function is a 16 char hexadecimal string used to compare results found by different computers in a BOINC quorum.
-// The hash can be used to compare results between GPU and CPU clients.
-// It also prevents the server from having to validate every AP10+ reported by clients, which can be in different orders depending on GPU.
-// It contains information about the assigned workunit and all APs found of length 10 or larger.
-static void write_hash()
+// BOINC checksum calculation, write to solution file, and close.
+void write_cksum()
 {
-	// calculate the top 32bits of the hash based on assigned workunit range
+	// calculate the top 32bits based on assigned workunit range
 	uint64_t minmax = KMIN + KMAX;
-	// check to make sure we don't overflow a 32bit signed int with large K values
+	// check to make sure we don't overflow a 32bit signed int
 	while(minmax > MAXINTV){
 		minmax -= MAXINTV;
 	}
 
 	// top 32 bits are workunit range... bottom 32 bits are solutions found
+	uint64_t bchecksum = (uint64_t)( (minmax << 32) | cksum);
 
-	int64_t hash = (int64_t)( (minmax << 32) | result_hash);
+	FILE* res_file = my_fopen(RESULTS_FILENAME,"a");
 
-
-	if (results_file == NULL)
-		results_file = my_fopen(RESULTS_FILENAME,"a");
-
-	if (results_file == NULL){
+	if (res_file == NULL){
 		fprintf(stderr,"Cannot open %s !!!\n",RESULTS_FILENAME);
 		exit(EXIT_FAILURE);
 	}
 
-	if (fprintf(results_file,"%016" PRIX64 "\n",hash)<0){
+	if (fprintf(res_file,"%016" PRIX64 "\n",bchecksum)<0){
 		fprintf(stderr,"Cannot write to %s !!!\n",RESULTS_FILENAME);
 		exit(EXIT_FAILURE);
 	}
 
-	fclose(results_file);
+	fclose(res_file);
 
 }
 
 
-static void write_state(int KMIN, int KMAX, int SHIFT, int K)
+void write_state(int KMIN, int KMAX, int SHIFT, int K)
 {
 	FILE *out;
 
@@ -194,7 +182,7 @@ static void write_state(int KMIN, int KMAX, int SHIFT, int K)
                         fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
         }
 
-	if (fprintf(out,"%d %d %d %d %d\n",KMIN,KMAX,SHIFT,K,result_hash) < 0){
+	if (fprintf(out,"%d %d %d %d %u %u\n",KMIN,KMAX,SHIFT,K,cksum,totalaps) < 0){
 		if (write_state_a_next)
 			fprintf(stderr,"Cannot write to %s !!! Continuing...\n",STATE_FILENAME_A);
 		else
@@ -215,20 +203,22 @@ static void write_state(int KMIN, int KMAX, int SHIFT, int K)
    Attempts to read from both state files,
    uses the most recent one available.
  */
-static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
+int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 {
 	FILE *in;
 	bool good_state_a = true;
 	bool good_state_b = true;
 	int tmp1, tmp2, tmp3;
-	int K_a, hash_a, K_b, hash_b;
+	int K_a, K_b;
+	uint32_t cksum_a, cksum_b;
+	uint32_t taps_a, taps_b;
 
         // Attempt to read state file A
 	if ((in = my_fopen(STATE_FILENAME_A,"r")) == NULL)
         {
 		good_state_a = false;
         }
-	else if (fscanf(in,"%d %d %d %d %d\n",&tmp1,&tmp2,&tmp3,&K_a,&hash_a) != 5)
+	else if (fscanf(in,"%d %d %d %d %u %u\n",&tmp1,&tmp2,&tmp3,&K_a,&cksum_a,&taps_a) != 6)
         {
 		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_A);
 		good_state_a = false;
@@ -248,7 +238,7 @@ static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
         {
                 good_state_b = false;
         }
-        else if (fscanf(in,"%d %d %d %d %d\n",&tmp1,&tmp2,&tmp3,&K_b,&hash_b) != 5)
+        else if (fscanf(in,"%d %d %d %d %u %u\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b) != 6)
         {
                 fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
                 good_state_b = false;
@@ -276,14 +266,16 @@ static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 	if (good_state_a && !good_state_b)
 	{
 		*K = K_a;
-		result_hash = hash_a;
+		cksum = cksum_a;
+		totalaps = taps_a;
 		write_state_a_next = false;
 		return 1;
 	}
         if (good_state_b && !good_state_a)
         {
                 *K = K_b;
-                result_hash = hash_b;
+                cksum = cksum_b;
+		totalaps = taps_b;
 		write_state_a_next = true;
 		return 1;
         }
@@ -292,15 +284,14 @@ static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 	return 0;
 }
 
-/* Bryan Little 9-28-2015
-   Bryan Little - added to CPU code 6-9-2016
+/* 
    Returns index j where:
    0<=j<k ==> f+j*d*23# is composite.
    j=k    ==> for all 0<=j<k, f+j*d*23# is a strong probable prime to base 2 only.
 */
-static int val_base2_ap26(int k, int d, int64_t f)
+int val_base2_ap26(int k, int d, uint64_t f)
 {
-	int64_t N;
+	uint64_t N;
 	int j;
 
 	if (f%2==0)
@@ -308,26 +299,33 @@ static int val_base2_ap26(int k, int d, int64_t f)
 
 	for (j = 0, N = f; j < k; j++){
 
-		if (!strong_prp(2,N))
+		int t;
+		uint64_t curBit, exp, nmo, q, one, r2;
+
+		mont_init(N, t, curBit, exp, nmo, q, one, r2);
+
+		if (!strong_prp(2, N, t, curBit, exp, nmo, q, one, r2))
 			return j;
 
-		N += (int64_t)d*2*3*5*7*11*13*17*19*23;
+		N += (uint64_t)d*2*3*5*7*11*13*17*19*23;
 	}
 
 	return j;
 }
 
-/*   Bryan Little - added to CPU code 6-9-2016
+/*
    Returns index j where:
    0<=j<k ==> f+j*d*23# is composite.
-   j=k    ==> for all 0<=j<k, f+j*d*23# is a strong probable prime to 9 bases.
+   j=k    ==> for all 0<=j<k, f+j*d*23# is prime
+
+   test is good to 2^64-1
 */
-static int validate_ap26(int k, int d, int64_t f)
+int validate_ap26(int k, int d, uint64_t f)
 {
-	int64_t N;
+	uint64_t N;
 	int j;
 
-	const int base[9] = {2,3,5,7,11,13,17,19,23};
+	const int base[12] = {2,3,5,7,11,13,17,19,23,29,31,37};
 
 	if (f%2==0){
 		return 0;
@@ -336,13 +334,27 @@ static int validate_ap26(int k, int d, int64_t f)
 
 	for (j = 0, N = f; j < k; ++j){
 
-		for (int i = 0; i < 9; ++i){
-			if (!strong_prp(base[i],N)){
-				return j;
+		int t;
+		uint64_t curBit, exp, nmo, q, one, r2;
+
+		mont_init(N, t, curBit, exp, nmo, q, one, r2);
+
+		if ( N < 3825123056546413051ULL ){
+			for (int i = 0; i < 9; ++i){
+				if (!strong_prp(base[i], N, t, curBit, exp, nmo, q, one, r2)){
+					return j;
+				}
+			}
+		}
+		else if ( N <= UINT64_MAX ){
+			for (int i = 0; i < 12; ++i){
+				if (!strong_prp(base[i], N, t, curBit, exp, nmo, q, one, r2)){
+					return j;
+				}
 			}
 		}
 
-		N += (int64_t)d*2*3*5*7*11*13*17*19*23;
+		N += (uint64_t)d*2*3*5*7*11*13*17*19*23;
 	}
 
 	return j;
@@ -352,18 +364,16 @@ static int validate_ap26(int k, int d, int64_t f)
 // Bryan Little - added to CPU code 6-9-2016
 // Changed function to check ALL solutions for validity, not just solutions >= MINIMUM_AP_LENGTH_TO_REPORT
 // GPU does a prp base 2 check only. It will sometimes report an AP with a base 2 probable prime.
-void ReportSolution(int AP_Length,int difference,int64_t First_Term)
+void ReportSolution(int AP_Length,int difference,uint64_t First_Term)
 {
 
 	int i;
 
-	/* 	hash for BOINC quorum
-		we create a hash based on each AP10+ result mod 1000
-		and that result's AP length  	*/
-	result_hash += First_Term % 1000;
-	result_hash += AP_Length;
-	if(result_hash > MAXINTV){
-		result_hash -= MAXINTV;
+	/*	add each AP10+ first_term mod 1000 and that AP's length to checksum	*/
+	cksum += First_Term % 1000;
+	cksum += AP_Length;
+	if(cksum > MAXINTV){
+		cksum -= MAXINTV;
 	}
 
 	i = validate_ap26(AP_Length,difference,First_Term);
@@ -371,7 +381,7 @@ void ReportSolution(int AP_Length,int difference,int64_t First_Term)
 	if (i < AP_Length){
 
 		if(boinc_is_standalone()){
-			printf("Non-Solution: %d %d %" PRId64 "\n",AP_Length,difference,First_Term);
+			printf("Non-Solution: %d %d %" PRIu64 "\n",AP_Length,difference,First_Term);
 		}
 
 		if (val_base2_ap26(AP_Length,difference,First_Term) < AP_Length){
@@ -386,7 +396,7 @@ void ReportSolution(int AP_Length,int difference,int64_t First_Term)
 		ReportSolution(i,difference,First_Term);
 
 		/* Check trailing terms */
-		ReportSolution(AP_Length-(i+1),difference,First_Term+(int64_t)(i+1)*difference*2*3*5*7*11*13*17*19*23);
+		ReportSolution(AP_Length-(i+1),difference,First_Term+(uint64_t)(i+1)*difference*2*3*5*7*11*13*17*19*23);
 		return;
 	}
 	else if (AP_Length >= MINIMUM_AP_LENGTH_TO_REPORT){
@@ -395,7 +405,7 @@ void ReportSolution(int AP_Length,int difference,int64_t First_Term)
 			results_file = my_fopen(RESULTS_FILENAME,"a");
 
 		if(boinc_is_standalone()){
-			printf("Solution: %d %d %" PRId64 "\n",AP_Length,difference,First_Term);
+			printf("Solution: %d %d %" PRIu64 "\n",AP_Length,difference,First_Term);
 		}
 
 		if (results_file == NULL){
@@ -403,7 +413,7 @@ void ReportSolution(int AP_Length,int difference,int64_t First_Term)
 			exit(EXIT_FAILURE);
 		}
 
-		if (fprintf(results_file,"%d %d %" PRId64 "\n",AP_Length,difference,First_Term)<0){
+		if (fprintf(results_file,"%d %d %" PRIu64 "\n",AP_Length,difference,First_Term)<0){
 			fprintf(stderr,"Cannot write to %s !!!\n",RESULTS_FILENAME);
 			exit(EXIT_FAILURE);
 		}
@@ -421,12 +431,7 @@ void checkpoint(int SHIFT, int K, int force)
 	if (force || boinc_time_to_checkpoint()){
 
 		if (results_file != NULL){
-			fflush(results_file);
-#if defined (_WIN32)
-			_commit(_fileno(results_file));
-#else
-			fsync(fileno(results_file));
-#endif
+			fclose(results_file);
                 }
 
 		write_state(KMIN,KMAX,SHIFT,K);
@@ -452,7 +457,7 @@ void checkpoint(int SHIFT, int K, int force)
 
 /* Returns 1 iff K will be searched.
  */
-static int will_search(int K)
+int will_search(int K)
 {
   	return (K%PRIME1 && K%PRIME2 && K%PRIME3 && K%PRIME4 &&
           	K%PRIME5 && K%PRIME6 && K%PRIME7 && K%PRIME8);
@@ -462,10 +467,31 @@ static int will_search(int K)
 #include "AP26.h"
 
 
+#ifdef _WIN32
+double getSysOpType()
+{
+    double ret = 0.0;
+    NTSTATUS(WINAPI *RtlGetVersion)(LPOSVERSIONINFOEXW);
+    OSVERSIONINFOEXW osInfo;
+
+    *(FARPROC*)&RtlGetVersion = GetProcAddress(GetModuleHandleA("ntdll"), "RtlGetVersion");
+
+    if (NULL != RtlGetVersion)
+    {
+        osInfo.dwOSVersionInfoSize = sizeof(osInfo);
+        RtlGetVersion(&osInfo);
+        ret = (double)osInfo.dwMajorVersion;
+    }
+    return ret;
+}
+#endif
+
+
 int main(int argc, char *argv[])
 {
-	int i, K, SHIFT, GPU, computeunits;
+	int i, K, SHIFT, computeunits;
 	int profile = 1;
+	int COMPUTE = 0;
 
 	// disable kernel cache.  compile every time, for testing.
 	// linux
@@ -476,14 +502,14 @@ int main(int argc, char *argv[])
         // Initialize BOINC
         BOINC_OPTIONS options;
         boinc_options_defaults(options);
-        options.normal_thread_priority = true;    // Raise thread prio to keep GPU fed
+        options.normal_thread_priority = true;    // Raise thread priority to keep GPU busy
         boinc_init_options(&options);
 
-	fprintf(stderr, "AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little and Iain Bethune\n",MAJORV,MINORV,SUFFIXV);
+	fprintf(stderr, "AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little\n",MAJORV,MINORV,SUFFIXV);
 	fprintf(stderr, "Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 
 	if(boinc_is_standalone()){
-		printf("AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little and Iain Bethune\n",MAJORV,MINORV,SUFFIXV);
+		printf("AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little\n",MAJORV,MINORV,SUFFIXV);
 		printf("Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 	}
 
@@ -515,7 +541,8 @@ int main(int argc, char *argv[])
 			printf("Beginning a new search with parameters from the command line\n");
 		}
 		K = KMIN;
-		result_hash = 0; // zero result hash for BOINC
+		cksum = 0; // zero result checksum for BOINC
+		totalaps = 0;  // total count of APs found
                 write_state_a_next = true;
 
 		// clear result file
@@ -592,7 +619,7 @@ int main(int argc, char *argv[])
  	char device_string2[1024];
 	cl_uint CUs;
 
-	err = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(device_string0), &device_string0, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DEVICE_NAME, sizeof(device_string0), &device_string0, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -601,7 +628,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	err = clGetDeviceInfo(device, CL_DEVICE_VENDOR, sizeof(device_string1), &device_string1, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DEVICE_VENDOR, sizeof(device_string1), &device_string1, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -610,7 +637,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	err = clGetDeviceInfo(device, CL_DRIVER_VERSION, sizeof(device_string2), &device_string2, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DRIVER_VERSION, sizeof(device_string2), &device_string2, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -619,7 +646,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	err = clGetDeviceInfo(device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &CUs, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DEVICE_MAX_COMPUTE_UNITS, sizeof(cl_uint), &CUs, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -633,26 +660,119 @@ int main(int argc, char *argv[])
 		printf("GPU Info:\n  Name: \t\t%s\n  Vendor: \t\t%s\n  Driver: \t\t%s\n  Compute Units: \t%u\n", device_string0, device_string1, device_string2, CUs);
 	}
 
-	// check vendor and normalize compute units
+	// check vendor and normalize compute units. doesn't have to be accurate, work size is determined by kernel runtime.
 	computeunits = (int)CUs;
-	char amd_s[] = "Advanced";
+
 	char intel_s[] = "Intel";
+	char arc_s[] = "Arc";
 	char nvidia_s[] = "NVIDIA";
 	
 	if(strstr((char*)device_string1, (char*)nvidia_s) != NULL){
-		GPU = GPU_NVIDIA;
+
+	 	cl_uint ccmajor;
+
+		err = clGetDeviceInfo(hardware.device, CL_DEVICE_COMPUTE_CAPABILITY_MAJOR_NV, sizeof(ccmajor), &ccmajor, NULL);
+		if ( err != CL_SUCCESS ) {
+			if(boinc_is_standalone()){
+		        	printf( "Error: clGetDeviceInfo\n" );
+			}
+			fprintf(stderr, "Error: clGetDeviceInfo\n" );
+		        exit(EXIT_FAILURE);
+		}
+
+		if(ccmajor < 7){
+			// older nvidia gpus
+		        printf("compiling sieve for NVIDIA with local mem cache\n");
+		        sieve = sclGetCLSoftware(sieve_nv_cl,"sieve",hardware, 1);
+		        fprintf(stderr,"Using local memory cache for sieve.\n");
+
+			// kernel has __attribute__ ((reqd_work_group_size(1024, 1, 1)))
+			// Nvidia's 4xx.x drivers changed CL_KERNEL_WORK_GROUP_SIZE return value to 256
+			// this kernel runs much quicker (33%+) at 1024 because of the local memory copy
+			// hack around nvidia's driver change
+			if(sieve.local_size[0] != 1024){
+				sieve.local_size[0] = 1024;
+				fprintf(stderr, "Set sieve kernel local size to 1024\n");
+				printf("Set sieve kernel local size to 1024\n");
+			}
+
+		}
+		else{
+			// current gpus with big L2 cache
+		        printf("compiling sieve\n");
+		        sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
+	                fprintf(stderr,"Using L2 cache for sieve.\n");		
+		}
+
+
+#ifdef _WIN32
+		// pascal or newer gpu on windows 10,11 allows long kernel runtimes without screen refresh issues
+
+		float winVer = (float)getSysOpType();
+
+		if(winVer >= 10.0f && ccmajor >= 6){
+			COMPUTE = 1;
+		}
+
+#else
+		// linux
+		// data center or mining card without video output	
+		// long kernel runtimes are ok
+		char dc0[] = "H100";
+		char dc1[] = "A100";
+		char dc2[] = "V100";
+		char dc3[] = "T4";
+		char dc4[] = "P106";
+		char dc5[] = "P104";
+		char dc6[] = "P102";
+		char dc7[] = "P100";
+		char dc8[] = "CMP";
+		char dc9[] = "A2";
+		char dc10[] = "A10";
+		char dc11[] = "A16";
+		char dc12[] = "A30";
+		char dc13[] = "A40";
+
+		if(	strstr((char*)device_string0, (char*)dc0) != NULL
+			|| strstr((char*)device_string0, (char*)dc1) != NULL
+			|| strstr((char*)device_string0, (char*)dc2) != NULL
+			|| strstr((char*)device_string0, (char*)dc3) != NULL
+			|| strstr((char*)device_string0, (char*)dc4) != NULL
+			|| strstr((char*)device_string0, (char*)dc5) != NULL
+			|| strstr((char*)device_string0, (char*)dc6) != NULL
+			|| strstr((char*)device_string0, (char*)dc7) != NULL
+			|| strstr((char*)device_string0, (char*)dc8) != NULL
+			|| strstr((char*)device_string0, (char*)dc9) != NULL
+			|| strstr((char*)device_string0, (char*)dc10) != NULL
+			|| strstr((char*)device_string0, (char*)dc11) != NULL
+			|| strstr((char*)device_string0, (char*)dc12) != NULL
+			|| strstr((char*)device_string0, (char*)dc13) != NULL){
+			COMPUTE = 1;
+		}
+
+#endif
+
+
+
 	}
-	else if(strstr((char*)device_string1, (char*)amd_s) != NULL){
-		GPU = GPU_AMD;
-		computeunits /= 2;
-	}
-	else if(strstr((char*)device_string1, (char*)intel_s) != NULL){
-		GPU = GPU_INTEL;
+	// Intel integrated Graphics
+	else if( strstr((char*)device_string1, (char*)intel_s) != NULL
+		 && 
+		 strstr((char*)device_string1, (char*)arc_s) == NULL ){
+
 		computeunits /= 20;
+
+                printf("compiling sieve\n");
+                sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
+
+                fprintf(stderr,"Detected Intel integrated graphics\n");	
 	}
+	// AMD, Intel Arc GPUs
         else{
-                GPU = GPU_GENERIC;
 		computeunits /= 2;
+
+                printf("compiling sieve\n");
+                sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
         }
 
 	if(computeunits < 1){
@@ -684,48 +804,6 @@ int main(int argc, char *argv[])
         printf("compiling checkn\n");
         checkn = sclGetCLSoftware(checkn_cl,"checkn",hardware, 1);
 
-        if(GPU == GPU_NVIDIA){
-	 	cl_uint ccmajor;
-
-		err = clGetDeviceInfo(hardware.device, CL_DEVICE_COMPUTE_CAPABILITY_MAJOR_NV, sizeof(ccmajor), &ccmajor, NULL);
-		if ( err != CL_SUCCESS ) {
-			if(boinc_is_standalone()){
-		        	printf( "Error: clGetDeviceInfo\n" );
-			}
-			fprintf(stderr, "Error: clGetDeviceInfo\n" );
-		        exit(EXIT_FAILURE);
-		}
-
-		if(ccmajor < 7){
-			// older nvidia gpus
-		        printf("compiling sieve for NVIDIA with local mem cache\n");
-		        sieve = sclGetCLSoftware(sieve_nv_cl,"sieve",hardware, 1);
-		        fprintf(stderr,"Using local memory cache for sieve.\n");
-
-			// kernel has __attribute__ ((reqd_work_group_size(1024, 1, 1)))
-			// Nvidia's 4xx.x drivers changed CL_KERNEL_WORK_GROUP_SIZE return value to 256
-			// this kernel runs much quicker (33%+) at 1024 because of the local memory copy
-			// hack around nvidia's driver change
-			if(sieve.local_size[0] != 1024){
-				sieve.local_size[0] = 1024;
-				fprintf(stderr, "Set sieve kernel local size to 1024\n");
-				printf("Set sieve kernel local size to 1024\n");
-			}
-
-		}
-		else{
-			// volta, turing, future cards with big caches
-		        printf("compiling sieve\n");
-		        sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
-	                fprintf(stderr,"Using L2 cache for sieve.\n");		
-		}
-        }
-        else{
-                printf("compiling sieve\n");
-                sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
-	        fprintf(stderr,"Using generic sieve kernel.\n");
-        }
-
 	printf("Kernel compile done.\n");
 
 
@@ -741,20 +819,20 @@ int main(int argc, char *argv[])
 
         // memory allocation
         // host memory
-        n43_h = (int64_t*)malloc(numn43s * sizeof(int64_t));
+        n43_h = (uint64_t*)malloc(numn43s * sizeof(uint64_t));
         sol_k_h = (int*)malloc(sol * sizeof(int));
-        sol_val_h = (int64_t*)malloc(sol * sizeof(int64_t));
-	counter_h = (int*)malloc(3 * sizeof(int));
+        sol_val_h = (uint64_t*)malloc(sol * sizeof(uint64_t));
+	counter_h = (int*)malloc(4 * sizeof(int));
         // device memory
-        n43_d = sclMalloc(hardware, CL_MEM_READ_WRITE, numn43s * sizeof(int64_t));
-        n59_0_d = sclMalloc(hardware, CL_MEM_READ_WRITE, halfn59s * sizeof(int64_t));
-        n59_1_d = sclMalloc(hardware, CL_MEM_READ_WRITE, halfn59s * sizeof(int64_t));
-        counter_d = sclMalloc(hardware, CL_MEM_READ_WRITE, 3 * sizeof(int));
-        OKOK_d = sclMalloc(hardware, CL_MEM_READ_WRITE, numOK * sizeof(int64_t));
+        n43_d = sclMalloc(hardware, CL_MEM_READ_WRITE, numn43s * sizeof(uint64_t));
+        n59_0_d = sclMalloc(hardware, CL_MEM_READ_WRITE, halfn59s * sizeof(uint64_t));
+        n59_1_d = sclMalloc(hardware, CL_MEM_READ_WRITE, halfn59s * sizeof(uint64_t));
+        counter_d = sclMalloc(hardware, CL_MEM_READ_WRITE, 4 * sizeof(int));
+        OKOK_d = sclMalloc(hardware, CL_MEM_READ_WRITE, numOK * sizeof(uint64_t));
         OK_d = sclMalloc(hardware, CL_MEM_READ_WRITE, numOK * sizeof(char));
         offset_d = sclMalloc(hardware, CL_MEM_READ_WRITE, 542 * sizeof(int));
         sol_k_d = sclMalloc(hardware, CL_MEM_READ_WRITE, sol * sizeof(int));
-        sol_val_d = sclMalloc(hardware, CL_MEM_READ_WRITE, sol * sizeof(int64_t));
+        sol_val_d = sclMalloc(hardware, CL_MEM_READ_WRITE, sol * sizeof(uint64_t));
 
 
 	/* Count the number of K in the range KMIN <= K <= KMAX that will actually
@@ -768,26 +846,33 @@ int main(int argc, char *argv[])
 	}
 
 
+	time_t totals, totalf;
+	if(boinc_is_standalone()){
+		time(&totals);
+	}
+
 	/* Top-level loop */
 	for (; K <= KMAX; ++K){
 		if (will_search(K)){
 
 			checkpoint(SHIFT,K,0);
 
-                        SearchAP26(K,SHIFT,profile,computeunits);
+                        SearchAP26(K,SHIFT,profile,computeunits,COMPUTE);
 
 		 	K_DONE++;
 		}
 	}
 
+	if(boinc_is_standalone()){
+		time(&totalf);
+		printf("search finished in %d sec.\n", (int)totalf - (int)totals);
+	}
 
 
 	boinc_begin_critical_section();
-	/* Force Final checkpoint */
 	checkpoint(SHIFT,K,1);
-	/* Write BOINC hash to file */
-	write_hash();
-	fprintf(stderr,"Workunit complete.\n");
+	write_cksum();
+	fprintf(stderr,"Workunit complete.  Number of AP10+ found %u\n", totalaps);
 	boinc_end_critical_section();
 
         // free memory
