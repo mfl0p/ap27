@@ -25,6 +25,8 @@
 extern "C" {
 #endif
 
+#define CL_TARGET_OPENCL_VERSION 110
+
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>

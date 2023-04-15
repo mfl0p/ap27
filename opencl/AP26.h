@@ -179,7 +179,6 @@ void SearchAP26(int K, int startSHIFT, int & profile, uint32_t CU, int COMPUTE)
 
 	// profile gpu sieve kernel time, once at program start
 	if(profile){
-		double total_ms = 0.0;
 		double kernel_ms = 0.0;
 		profile = 0;
 
@@ -225,55 +224,19 @@ void SearchAP26(int K, int startSHIFT, int & profile, uint32_t CU, int COMPUTE)
 		sclSetKernelArg(sieve, 5, sizeof(cl_mem), &counter_d);
 		sclSetKernelArg(sieve, 6, sizeof(int), &p);
 
-		// spin up some kernels while profiling
-		for(int w = 0; w < 4; w++){
+		sclEnqueueKernel(hardware, clearn);
+		kernel_ms = ProfilesclEnqueueKernel(hardware, sieve);
 
-			sclEnqueueKernel(hardware, clearn);
+		if(kernel_ms == 0.0) kernel_ms = 1.0;
 
-			kernel_ms = ProfilesclEnqueueKernel(hardware, sieve);
+		double multi = COMPUTE?(100.0 / kernel_ms):(10.0 / kernel_ms);
 
-			if(w > 0){
-				total_ms += kernel_ms;
-			}
-		}
-
-		// avg of the 3 profiles
-		double prof_avg_ms = total_ms / 3.0;
-		if(prof_avg_ms == 0.0){
-			prof_avg_ms = 1.0;
-		}
-
-		double prof_multi;
-
-		if(COMPUTE){
-			// target kernel time is 100ms
-			prof_multi = 100.0 / prof_avg_ms;
-		}
-		else{
-			// target kernel time is 10ms
-			prof_multi = 10.0 / prof_avg_ms;
-		}
-
-		// update chunk size based on the profile
-		uint64_t new_range = (uint64_t)((double)sieve.global_size[0] * prof_multi);
+		uint64_t new_range = (uint64_t)((double)sieve.global_size[0] * multi);
 		if(new_range > halfn59s){
 			new_range = halfn59s;
 		}
 
 		sclSetGlobalSize( sieve, new_range );
-
-
-		float size_pct = (float)( ((double)sieve.global_size[0] / (double)halfn59s)*100.0 );
-
-		if(boinc_is_standalone()){
-			printf("gpu worksize: %" PRIu64 ", %0.1f%% of maximum\n", sieve.global_size[0], size_pct);
-		}
-		fprintf(stderr, "gpu worksize: %" PRIu64 ", %0.1f%% of maximum\n", sieve.global_size[0], size_pct);
-
-
-		if(COMPUTE){
-			fprintf(stderr, "compute mode\n");
-		}
 
 		// adjust n result array size
 		sclReleaseMemObject(n_result_d);
@@ -348,6 +311,7 @@ void SearchAP26(int K, int startSHIFT, int & profile, uint32_t CU, int COMPUTE)
 				}
 				sclSetKernelArg(sieve, 2, sizeof(int), &SHIFT);
 				sclSetKernelArg(sieve, 6, sizeof(int), &p);
+
 				if(iter == 0){
 					launchEvent = sclEnqueueKernelEvent(hardware, sieve);
 				}
@@ -406,8 +370,8 @@ void SearchAP26(int K, int startSHIFT, int & profile, uint32_t CU, int COMPUTE)
 	}
 	// check if PRP test kernel has reached the software limit
 	if(counter_h[3] != 0){
-		printf("Error: AP sequence PRP test kernel overflowed 2^64-1.  SHIFT is too large.\n");
-		fprintf(stderr, "Error: AP sequence PRP test kernel overflowed 2^64-1.  SHIFT is too large.\n");
+		printf("Error: AP sequence PRP test kernel overflowed.  SHIFT is too large.\n");
+		fprintf(stderr, "Error: AP sequence PRP test kernel overflowed.  SHIFT is too large.\n");
 		exit(EXIT_FAILURE);
 	}
 

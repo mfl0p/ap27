@@ -4,9 +4,11 @@
 */
 
 
+__constant ulong MOD = (ulong)258559632607830;
+
+
 __kernel void setupn(__global ulong *n43_d, __global ulong *n59_0, __global ulong *n59_1, ulong S53, ulong S47, ulong S43){
 
-	const ulong MOD = 258559632607830UL;
 	int i = get_global_id(0);
 	ulong n43, n47, n53;
 	int i43, i47, i53;

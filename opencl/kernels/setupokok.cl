@@ -12,10 +12,11 @@
 		}
 
 
+__constant ulong MOD = (ulong)258559632607830;
+
+
 __kernel void setupokok(int shift, __global char *OK, __global ulong *OKOK, __global int *offset){
 
-
-	const ulong MOD = 258559632607830UL;
 	int i = get_global_id(0);
 	int jj;
 

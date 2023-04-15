@@ -2,34 +2,18 @@
 	AP26 GPU OpenCL application
  	Bryan Little
 	with contributions by Yves Gallot
- 	Jan 10, 2023				*/
+ 	April 15, 2023				*/
 
 
-// AP26 application version
-#define MAJORV 4
-#define MINORV 0
-#define SUFFIXV ""
-
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdint.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
 #include <cinttypes>
 
-#include "CONST.H"
-#include "prime.h"
+#include "const.h"
 
 #include "boinc_api.h"
-#include "version.h"
-#include "filesys.h"
 #include "boinc_opencl.h"
 
-
 #include "simpleCL.h"
+
 // ocl kernels
 #include "clearok.h"
 #include "clearokok.h"
@@ -56,10 +40,7 @@
 #define RESULTS_FILENAME "SOL-AP26.txt"
 
 #define MINIMUM_AP_LENGTH_TO_REPORT 20
-
-// smaller than 32bit signed int max
 #define MAXINTV 2000000000
-
 
 /* Global variables */
 int KMIN, KMAX, K_DONE, K_COUNT;
@@ -95,11 +76,121 @@ cl_mem n43_d = NULL;
 cl_mem n59_0_d = NULL;
 cl_mem n59_1_d = NULL;
 
-
 FILE *results_file = NULL;
 
-// bryan little
-// added boinc restart on gpu malloc error
+
+/*
+	tests primality of each term of the AP sequence
+	test is good to 2^64-1
+*/
+
+
+uint64_t invert(uint64_t p)
+{
+	uint64_t p_inv = 1, prev = 0;
+	while (p_inv != prev) { prev = p_inv; p_inv *= 2 - p * p_inv; }
+	return p_inv;
+}
+
+
+uint64_t montMul(uint64_t a, uint64_t b, uint64_t p, uint64_t q)
+{
+	unsigned __int128 res;
+
+	res  = (unsigned __int128)a * b;
+	uint64_t ab0 = (uint64_t)res;
+	uint64_t ab1 = res >> 64;
+
+	uint64_t m = ab0 * q;
+
+	res = (unsigned __int128)m * p;
+	uint64_t mp = res >> 64;
+
+	uint64_t r = ab1 - mp;
+
+	return ( ab1 < mp ) ? r + p : r;
+}
+
+
+uint64_t add(uint64_t a, uint64_t b, uint64_t p)
+{
+	uint64_t r;
+
+	uint64_t c = (a >= p - b) ? p : 0;
+
+	r = a + b - c;
+
+	return r;
+}
+
+
+// initialize montgomery constants
+void mont_init(uint64_t N, int & t, uint64_t & curBit, uint64_t & exp, uint64_t & nmo, uint64_t & q, uint64_t & one, uint64_t & r2){
+
+
+	nmo = N-1;
+	t = __builtin_ctzll(nmo);
+	exp = N >> t;
+	curBit = 0x8000000000000000;
+	curBit >>= ( __builtin_clzll(exp) + 1 );
+	q = invert(N);
+	one = (-N) % N;
+	nmo = N - one;
+	uint64_t two = add(one, one, N);
+	r2 = add(two, two, N);
+	for (int i = 0; i < 5; ++i)
+		r2 = montMul(r2, r2, N, q);	// 4^{2^5} = 2^64
+
+}
+
+
+bool strong_prp(int base, uint64_t N, int t, uint64_t curBit, uint64_t exp, uint64_t nmo, uint64_t q, uint64_t one, uint64_t r2)
+{
+
+	/* If N is prime and N = d*2^t+1, where d is odd, then either
+		1.  a^d = 1 (mod N), or
+		2.  a^(d*2^s) = -1 (mod N) for some s in 0 <= s < t    */
+
+
+	uint64_t a = base;
+	uint64_t mbase = montMul(a,r2,N,q);  // convert base to montgomery form
+
+	a = mbase;
+
+  	/* r <-- a^d mod N, assuming d odd */
+	while( curBit )
+	{
+		a = montMul(a,a,N,q);
+
+		if(exp & curBit){
+			a = montMul(a,mbase,N,q);
+		}
+
+		curBit >>= 1;
+	}
+
+	/* Clause 1. and s = 0 case for clause 2. */
+	if (a == one || a == nmo){
+		return true;
+	}
+
+	/* 0 < s < t cases for clause 2. */
+	for (int s = 1; s < t; ++s){
+
+		a = montMul(a,a,N,q);
+
+		if(a == nmo){
+	    		return true;
+		}
+	}
+
+
+	return false;
+}
+
+
+
+
 cl_mem sclMalloc( sclHard hardware, cl_int mode, size_t size ){
         cl_mem buffer;
 
@@ -140,14 +231,12 @@ void Progress(double prog){
 // BOINC checksum calculation, write to solution file, and close.
 void write_cksum()
 {
-	// calculate the top 32bits based on assigned workunit range
 	uint64_t minmax = KMIN + KMAX;
-	// check to make sure we don't overflow a 32bit signed int
+
 	while(minmax > MAXINTV){
 		minmax -= MAXINTV;
 	}
 
-	// top 32 bits are workunit range... bottom 32 bits are solutions found
 	uint64_t bchecksum = (uint64_t)( (minmax << 32) | cksum);
 
 	FILE* res_file = my_fopen(RESULTS_FILENAME,"a");
@@ -360,9 +449,7 @@ int validate_ap26(int k, int d, uint64_t f)
 	return j;
 }
 
-// Bryan Little 9-28-2015
-// Bryan Little - added to CPU code 6-9-2016
-// Changed function to check ALL solutions for validity, not just solutions >= MINIMUM_AP_LENGTH_TO_REPORT
+
 // GPU does a prp base 2 check only. It will sometimes report an AP with a base 2 probable prime.
 void ReportSolution(int AP_Length,int difference,uint64_t First_Term)
 {
@@ -505,11 +592,11 @@ int main(int argc, char *argv[])
         options.normal_thread_priority = true;    // Raise thread priority to keep GPU busy
         boinc_init_options(&options);
 
-	fprintf(stderr, "AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little\n",MAJORV,MINORV,SUFFIXV);
+	fprintf(stderr, "AP26 OpenCL 10-shift search version %s by Bryan Little\n",VERS);
 	fprintf(stderr, "Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 
 	if(boinc_is_standalone()){
-		printf("AP26 OpenCL 10-shift search version %d.%d%s by Bryan Little\n",MAJORV,MINORV,SUFFIXV);
+		printf("AP26 OpenCL 10-shift search version %s by Bryan Little\n",VERS);
 		printf("Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 	}
 
@@ -684,7 +771,6 @@ int main(int argc, char *argv[])
 			// older nvidia gpus
 		        printf("compiling sieve for NVIDIA with local mem cache\n");
 		        sieve = sclGetCLSoftware(sieve_nv_cl,"sieve",hardware, 1);
-		        fprintf(stderr,"Using local memory cache for sieve.\n");
 
 			// kernel has __attribute__ ((reqd_work_group_size(1024, 1, 1)))
 			// Nvidia's 4xx.x drivers changed CL_KERNEL_WORK_GROUP_SIZE return value to 256
@@ -701,7 +787,6 @@ int main(int argc, char *argv[])
 			// current gpus with big L2 cache
 		        printf("compiling sieve\n");
 		        sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
-	                fprintf(stderr,"Using L2 cache for sieve.\n");		
 		}
 
 

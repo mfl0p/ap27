@@ -81,8 +81,8 @@ inline bool strong_prp(ulong N)
 
 	ulong q = invert(N);
 	ulong one = (-N) % N;
-	ulong a = add(one, one, N); // two, in montgomery form
-	nmo = N - one;  // N-1 in montgomery form
+	ulong a = add(one, one, N); 	// two, in montgomery form
+	nmo = N - one;  		// N-1 in montgomery form
 
 	/* If N is prime and N = d*2^t+1, where d is odd, then either
 		1.  a^d = 1 (mod N), or
@@ -134,7 +134,7 @@ __kernel void checkn(__global ulong * n_result, ulong STEP, __global int * sol_k
 
 		ulong m = n + STEP*5;
 
-		if(m < n){  // overflowed ulong, hit software limit
+		if(m < n){  // software limit
 			atomic_or(&counter[3], 1);
 		}
 
@@ -144,7 +144,7 @@ __kernel void checkn(__global ulong * n_result, ulong STEP, __global int * sol_k
 		while(strong_prp( m )){
 			m += STEP;
 			++k;
-			if(m < n){  // overflowed ulong, hit software limit
+			if(m < n){  // software limit
 				atomic_or(&counter[3], 1);
 				break;
 			}
@@ -162,7 +162,7 @@ __kernel void checkn(__global ulong * n_result, ulong STEP, __global int * sol_k
 			}
 
 			// AP length >= 10 store to results
-			int index = atomic_add(&counter[2], 1);
+			int index = atomic_inc(&counter[2]);
 			sol_k[index] = k;
 			sol_val[index] = m+STEP;
 		}

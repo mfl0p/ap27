@@ -8,12 +8,12 @@
 
 */
 
+__constant int halfn59s = 68687660;
+__constant ulong MOD = (ulong)258559632607830;
 
-__kernel __attribute__ ((reqd_work_group_size(1024, 1, 1))) void sieve(__global ulong *n59g, ulong S59,
-	int shift, __global ulong *n_result, __global ulong *OKOK, __global int *counter, int offset){
 
-	const int halfn59s = 68687660;
-	const ulong MOD = 258559632607830UL;
+__kernel __attribute__ ((reqd_work_group_size(1024, 1, 1))) void sieve(__global ulong *n59g, ulong S59, int shift, __global ulong *n_result, __global ulong *OKOK, __global int *counter, int offset){
+
 	int idx = get_global_id(0) + offset;
 
 	__local ulong localOKOK[5898];
@@ -129,7 +129,7 @@ __kernel __attribute__ ((reqd_work_group_size(1024, 1, 1))) void sieve(__global 
 					ulong n=n59+(setbit+shift)*MOD;
 
 					if(n%7 && n%11 && n%13 && n%17 && n%19 && n%23){
-						n_result[atomic_add(&counter[0], 1)] = n;
+						n_result[atomic_inc(&counter[0])] = n;
 					}
 				}
 				else{  // more than 1 set bit
@@ -138,12 +138,12 @@ __kernel __attribute__ ((reqd_work_group_size(1024, 1, 1))) void sieve(__global 
 						ulong n=n59+(setbit+shift)*MOD;
 
 						if(n%7 && n%11 && n%13 && n%17 && n%19 && n%23){
-							n_result[atomic_add(&counter[0], 1)] = n;
+							n_result[atomic_inc(&counter[0])] = n;
 						}
 						
-						sito ^= 1UL << setbit; // toggle bit off
+						sito ^= ((ulong)1) << setbit; // toggle bit off
 					}
-					while(popcount(sito));
+					while(sito);
 				}
 			}
 
