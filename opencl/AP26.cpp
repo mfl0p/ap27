@@ -946,6 +946,7 @@ int main(int argc, char *argv[])
 
 		 	K_DONE++;
 		}
+		Progress((double)K_DONE / (double)K_COUNT);
 	}
 
 	if(boinc_is_standalone()){
