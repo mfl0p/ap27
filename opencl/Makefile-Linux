@@ -4,7 +4,7 @@ LD = $(CC)
 .SUFFIXES:
 .SUFFIXES: .o .c .h .cl .cpp
 
-VER = 23_4_15
+VER = 23_4_26
 
 APP = ap26_ocl_linux64_$(VER)
 

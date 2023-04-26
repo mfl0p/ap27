@@ -65,6 +65,7 @@ uint64_t *n43_h;
 uint64_t *sol_val_h;
 int *sol_k_h;
 int *counter_h;
+uint64_t last_trickle;
 cl_mem n_result_d = NULL;
 cl_mem counter_d = NULL;
 cl_mem OKOK_d = NULL;
@@ -77,6 +78,38 @@ cl_mem n59_0_d = NULL;
 cl_mem n59_1_d = NULL;
 
 FILE *results_file = NULL;
+
+
+void handle_trickle_up(){
+
+	if(boinc_is_standalone()) return;
+
+	uint64_t now = (uint64_t)time(NULL);
+
+	if( (now-last_trickle) > 86400 ){	// Once per day
+
+		last_trickle = now;
+
+		double progress = boinc_get_fraction_done();
+		double cpu;
+		boinc_wu_cpu_time(cpu);
+		APP_INIT_DATA init_data;
+		boinc_get_init_data(init_data);
+		double run = boinc_elapsed_time() + init_data.starting_elapsed_time;
+
+		char msg[512];
+		sprintf(msg, "<trickle_up>\n"
+			    "   <progress>%lf</progress>\n"
+			    "   <cputime>%lf</cputime>\n"
+			    "   <runtime>%lf</runtime>\n"
+			    "</trickle_up>\n",
+			     progress, cpu, run  );
+		char variety[64];
+		sprintf(variety, "ap26_progress");
+		boinc_send_trickle_up(variety, msg);
+	}
+
+}
 
 
 /*
@@ -271,7 +304,7 @@ void write_state(int KMIN, int KMAX, int SHIFT, int K)
                         fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
         }
 
-	if (fprintf(out,"%d %d %d %d %u %u\n",KMIN,KMAX,SHIFT,K,cksum,totalaps) < 0){
+	if (fprintf(out,"%d %d %d %d %u %u %" PRIu64 "\n",KMIN,KMAX,SHIFT,K,cksum,totalaps,last_trickle) < 0){
 		if (write_state_a_next)
 			fprintf(stderr,"Cannot write to %s !!! Continuing...\n",STATE_FILENAME_A);
 		else
@@ -301,13 +334,14 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 	int K_a, K_b;
 	uint32_t cksum_a, cksum_b;
 	uint32_t taps_a, taps_b;
+	uint64_t trickle_a, trickle_b;
 
         // Attempt to read state file A
 	if ((in = my_fopen(STATE_FILENAME_A,"r")) == NULL)
         {
 		good_state_a = false;
         }
-	else if (fscanf(in,"%d %d %d %d %u %u\n",&tmp1,&tmp2,&tmp3,&K_a,&cksum_a,&taps_a) != 6)
+	else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_a,&cksum_a,&taps_a,&trickle_a) != 7)
         {
 		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_A);
 		good_state_a = false;
@@ -327,7 +361,7 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
         {
                 good_state_b = false;
         }
-        else if (fscanf(in,"%d %d %d %d %u %u\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b) != 6)
+        else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b,&trickle_b) != 7)
         {
                 fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
                 good_state_b = false;
@@ -358,6 +392,8 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 		cksum = cksum_a;
 		totalaps = taps_a;
 		write_state_a_next = false;
+		last_trickle = trickle_a;
+
 		return 1;
 	}
         if (good_state_b && !good_state_a)
@@ -366,6 +402,8 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
                 cksum = cksum_b;
 		totalaps = taps_b;
 		write_state_a_next = true;
+		last_trickle = trickle_b;
+
 		return 1;
         }
 
@@ -521,6 +559,8 @@ void checkpoint(int SHIFT, int K, int force)
 			fclose(results_file);
                 }
 
+		handle_trickle_up();
+
 		write_state(KMIN,KMAX,SHIFT,K);
 
 		if(boinc_is_standalone()){
@@ -639,6 +679,9 @@ int main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 		fclose(temp_file);
+
+		// setup boinc trickle up
+		last_trickle = (uint64_t)time(NULL);
 	}
 
 	//trying to resume a finished workunit
@@ -701,12 +744,12 @@ int main(int argc, char *argv[])
 	hardware.queue = queue;
 	hardware.context = ctx;
 
- 	char device_string0[1024];
- 	char device_string1[1024];
- 	char device_string2[1024];
+ 	char device_name[1024];
+ 	char device_vend[1024];
+ 	char device_driver[1024];
 	cl_uint CUs;
 
-	err = clGetDeviceInfo(hardware.device, CL_DEVICE_NAME, sizeof(device_string0), &device_string0, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DEVICE_NAME, sizeof(device_name), &device_name, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -715,7 +758,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	err = clGetDeviceInfo(hardware.device, CL_DEVICE_VENDOR, sizeof(device_string1), &device_string1, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DEVICE_VENDOR, sizeof(device_vend), &device_vend, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -724,7 +767,7 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	err = clGetDeviceInfo(hardware.device, CL_DRIVER_VERSION, sizeof(device_string2), &device_string2, NULL);
+	err = clGetDeviceInfo(hardware.device, CL_DRIVER_VERSION, sizeof(device_driver), &device_driver, NULL);
 	if ( err != CL_SUCCESS ) {
 		if(boinc_is_standalone()){
 			printf( "Error: clGetDeviceInfo\n" );
@@ -742,9 +785,9 @@ int main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	fprintf(stderr, "GPU Info:\n  Name: \t\t%s\n  Vendor: \t\t%s\n  Driver: \t\t%s\n  Compute Units: \t%u\n", device_string0, device_string1, device_string2, CUs);
+	fprintf(stderr, "GPU Info:\n  Name: \t\t%s\n  Vendor: \t\t%s\n  Driver: \t\t%s\n  Compute Units: \t%u\n", device_name, device_vend, device_driver, CUs);
 	if(boinc_is_standalone()){
-		printf("GPU Info:\n  Name: \t\t%s\n  Vendor: \t\t%s\n  Driver: \t\t%s\n  Compute Units: \t%u\n", device_string0, device_string1, device_string2, CUs);
+		printf("GPU Info:\n  Name: \t\t%s\n  Vendor: \t\t%s\n  Driver: \t\t%s\n  Compute Units: \t%u\n", device_name, device_vend, device_driver, CUs);
 	}
 
 	// check vendor and normalize compute units. doesn't have to be accurate, work size is determined by kernel runtime.
@@ -754,7 +797,7 @@ int main(int argc, char *argv[])
 	char arc_s[] = "Arc";
 	char nvidia_s[] = "NVIDIA";
 	
-	if(strstr((char*)device_string1, (char*)nvidia_s) != NULL){
+	if(strstr((char*)device_vend, (char*)nvidia_s) != NULL){
 
 	 	cl_uint ccmajor;
 
@@ -818,20 +861,20 @@ int main(int argc, char *argv[])
 		char dc12[] = "A30";
 		char dc13[] = "A40";
 
-		if(	strstr((char*)device_string0, (char*)dc0) != NULL
-			|| strstr((char*)device_string0, (char*)dc1) != NULL
-			|| strstr((char*)device_string0, (char*)dc2) != NULL
-			|| strstr((char*)device_string0, (char*)dc3) != NULL
-			|| strstr((char*)device_string0, (char*)dc4) != NULL
-			|| strstr((char*)device_string0, (char*)dc5) != NULL
-			|| strstr((char*)device_string0, (char*)dc6) != NULL
-			|| strstr((char*)device_string0, (char*)dc7) != NULL
-			|| strstr((char*)device_string0, (char*)dc8) != NULL
-			|| strstr((char*)device_string0, (char*)dc9) != NULL
-			|| strstr((char*)device_string0, (char*)dc10) != NULL
-			|| strstr((char*)device_string0, (char*)dc11) != NULL
-			|| strstr((char*)device_string0, (char*)dc12) != NULL
-			|| strstr((char*)device_string0, (char*)dc13) != NULL){
+		if(	strstr((char*)device_name, (char*)dc0) != NULL
+			|| strstr((char*)device_name, (char*)dc1) != NULL
+			|| strstr((char*)device_name, (char*)dc2) != NULL
+			|| strstr((char*)device_name, (char*)dc3) != NULL
+			|| strstr((char*)device_name, (char*)dc4) != NULL
+			|| strstr((char*)device_name, (char*)dc5) != NULL
+			|| strstr((char*)device_name, (char*)dc6) != NULL
+			|| strstr((char*)device_name, (char*)dc7) != NULL
+			|| strstr((char*)device_name, (char*)dc8) != NULL
+			|| strstr((char*)device_name, (char*)dc9) != NULL
+			|| strstr((char*)device_name, (char*)dc10) != NULL
+			|| strstr((char*)device_name, (char*)dc11) != NULL
+			|| strstr((char*)device_name, (char*)dc12) != NULL
+			|| strstr((char*)device_name, (char*)dc13) != NULL){
 			COMPUTE = 1;
 		}
 
@@ -840,25 +883,29 @@ int main(int argc, char *argv[])
 
 
 	}
-	// Intel integrated Graphics
-	else if( strstr((char*)device_string1, (char*)intel_s) != NULL
-		 && 
-		 strstr((char*)device_string1, (char*)arc_s) == NULL ){
+	// Intel
+	else if( strstr((char*)device_vend, (char*)intel_s) != NULL ){
 
-		computeunits /= 20;
+		if( strstr((char*)device_name, (char*)arc_s) != NULL ){
+			computeunits /= 10;
+		}
+		else{
+			computeunits /= 20;
+	                fprintf(stderr,"Detected Intel integrated graphics\n");	
+		}
 
                 printf("compiling sieve\n");
                 sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
 
-                fprintf(stderr,"Detected Intel integrated graphics\n");	
 	}
-	// AMD, Intel Arc GPUs
+	// AMD
         else{
 		computeunits /= 2;
 
                 printf("compiling sieve\n");
                 sieve = sclGetCLSoftware(sieve_cl,"sieve",hardware, 1);
         }
+
 
 	if(computeunits < 1){
 		computeunits = 1;

@@ -129,8 +129,8 @@ __kernel void sieve(__global ulong * n59g, ulong S59, int shift, __global ulong 
 						}
 						
 						sito ^= ((ulong)1) << setbit; // toggle bit off
-					}
-					while(sito);
+
+					} while(sito);
 				}
 			}
 

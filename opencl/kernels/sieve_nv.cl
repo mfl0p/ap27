@@ -142,8 +142,8 @@ __kernel __attribute__ ((reqd_work_group_size(1024, 1, 1))) void sieve(__global 
 						}
 						
 						sito ^= ((ulong)1) << setbit; // toggle bit off
-					}
-					while(sito);
+
+					} while(sito);
 				}
 			}
 
