@@ -48,6 +48,8 @@ uint32_t totalaps;
 bool write_state_a_next;
 uint32_t numn;
 uint32_t cksum;
+uint64_t last_trickle;
+time_t last_ckpt;
 
 sclHard hardware;
 
@@ -65,7 +67,6 @@ uint64_t *n43_h;
 uint64_t *sol_val_h;
 int *sol_k_h;
 int *counter_h;
-uint64_t last_trickle;
 cl_mem n_result_d = NULL;
 cl_mem counter_d = NULL;
 cl_mem OKOK_d = NULL;
@@ -547,19 +548,22 @@ void ReportSolution(int AP_Length,int difference,uint64_t First_Term)
 }
 
 /* Checkpoint 
-   If force is nonzero then don't ask BOINC for permission.
 */
 void checkpoint(int SHIFT, int K, int force)
 {
 	double d;
+	time_t curr_time;
 
-	if (force || boinc_time_to_checkpoint()){
+	time(&curr_time);
+	int diff = (int)curr_time - (int)last_ckpt;
+
+	if( diff > 60 || force ){
+
+		last_ckpt = curr_time;
 
 		if (results_file != NULL){
 			fclose(results_file);
                 }
-
-		handle_trickle_up();
 
 		write_state(KMIN,KMAX,SHIFT,K);
 
@@ -567,17 +571,10 @@ void checkpoint(int SHIFT, int K, int force)
 			printf("Checkpoint: KMIN:%d KMAX:%d SHIFT:%d K:%d\n",KMIN,KMAX,SHIFT,K);
 		}
 
-		if (!force)
-			boinc_checkpoint_completed();
-	}
+		boinc_checkpoint_completed();
 
-	if(force){
-		if (K_COUNT > 0)
-			d = (double)(K_DONE / K_COUNT);
-		else
-			d = 1.0;
+		handle_trickle_up();
 
-		boinc_fraction_done(d);
 	}
 
 }
@@ -983,6 +980,8 @@ int main(int argc, char *argv[])
 		time(&totals);
 	}
 
+	time(&last_ckpt);
+
 	/* Top-level loop */
 	for (; K <= KMAX; ++K){
 		if (will_search(K)){
@@ -992,8 +991,9 @@ int main(int argc, char *argv[])
                         SearchAP26(K,SHIFT,profile,computeunits,COMPUTE);
 
 		 	K_DONE++;
+
+			Progress((double)K_DONE / (double)K_COUNT);
 		}
-		Progress((double)K_DONE / (double)K_COUNT);
 	}
 
 	if(boinc_is_standalone()){
@@ -1003,6 +1003,7 @@ int main(int argc, char *argv[])
 
 
 	boinc_begin_critical_section();
+	boinc_fraction_done(1.0);
 	checkpoint(SHIFT,K,1);
 	write_cksum();
 	fprintf(stderr,"Workunit complete.  Number of AP10+ found %u\n", totalaps);
