@@ -340,6 +340,7 @@ void SearchAP26(int K, int startSHIFT, int & profile, uint32_t CU, int COMPUTE)
 
 
 	// sleep CPU thread while GPU is busy
+	waitOnEvent(hardware, launchEvent);
 	sleepCPU(hardware);
 
 	// copy solution count to host memory

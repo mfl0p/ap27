@@ -563,6 +563,7 @@ void checkpoint(int SHIFT, int K, int force)
 
 		if (results_file != NULL){
 			fclose(results_file);
+			results_file = NULL;
                 }
 
 		write_state(KMIN,KMAX,SHIFT,K);
