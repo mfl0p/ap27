@@ -1,163 +1,57 @@
 /* cpuavx.cpp --
 
-   AVX2 support 30 July 2016 by Bryan Little
-   Sieve arrays sized to fit in 256kbyte L2 cache
-
-   Floating point bitwise AND is faster than integer.
-   Probably because integer units are calculating the array index.
-
-   Blend and count zeros by Sebastian Jaworowicz
-
-   See http://www.math.uni.wroc.pl/~jwr/AP26/AP26v3.pdf for information
-   about how the algorithm works and for the copyleft notice.
 */
 
 #include <x86intrin.h>
-#include <iostream>
 #include <cinttypes>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdint.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
-#include <algorithm>
-
+#include <cstdio>
 #include <pthread.h>
-#include <thread>
 
 #include "cpuconst.h"
 
-extern __m128i svec1, svec2, mvec1, mvec2, numvec1_1, numvec2_1, numvec1_2, numvec2_2, zerovec_avx;
 
-int64_t OKOK61[61];
-int64_t OKOK67[67];
-int64_t OKOK71[71];
-int64_t OKOK73[73];
-int64_t OKOK79[79];
-int64_t OKOK83[83];
-int64_t OKOK89[89];
-int64_t OKOK97[97];
-int64_t OKOK101[101];
-int64_t OKOK103[103];
-int64_t OKOK107[107];
-int64_t OKOK109[109];
-int64_t OKOK113[113];
-int64_t OKOK127[127];
-int64_t OKOK131[131];
-int64_t OKOK137[137];
-int64_t OKOK139[139];
-int64_t OKOK149[149];
-int64_t OKOK151[151];
-int64_t OKOK157[157];
-int64_t OKOK163[163];
-int64_t OKOK167[167];
-int64_t OKOK173[173];
-int64_t OKOK179[179];
-int64_t OKOK181[181];
-int64_t OKOK191[191];
-int64_t OKOK193[193];
-int64_t OKOK197[197];
-int64_t OKOK199[199];
-int64_t OKOK211[211];
-int64_t OKOK223[223];
-int64_t OKOK227[227];
-int64_t OKOK229[229];
-int64_t OKOK233[233];
-int64_t OKOK239[239];
-int64_t OKOK241[241];
-int64_t OKOK251[251];
-int64_t OKOK257[257];
-int64_t OKOK263[263];
-int64_t OKOK269[269];
-int64_t OKOK271[271];
-int64_t OKOK277[277];
-
-extern char OK61[61];
-extern char OK67[67];
-extern char OK71[71];
-extern char OK73[73];
-extern char OK79[79];
-extern char OK83[83];
-extern char OK89[89];
-extern char OK97[97];
-extern char OK101[101];
-extern char OK103[103];
-extern char OK107[107];
-extern char OK109[109];
-extern char OK113[113];
-extern char OK127[127];
-extern char OK131[131];
-extern char OK137[137];
-extern char OK139[139];
-extern char OK149[149];
-extern char OK151[151];
-extern char OK157[157];
-extern char OK163[163];
-extern char OK167[167];
-extern char OK173[173];
-extern char OK179[179];
-extern char OK181[181];
-extern char OK191[191];
-extern char OK193[193];
-extern char OK197[197];
-extern char OK199[199];
-extern char OK211[211];
-extern char OK223[223];
-extern char OK227[227];
-extern char OK229[229];
-extern char OK233[233];
-extern char OK239[239];
-extern char OK241[241];
-extern char OK251[251];
-extern char OK257[257];
-extern char OK263[263];
-extern char OK269[269];
-extern char OK271[271];
-extern char OK277[277];
-extern char OK281[281];
-extern char OK283[283];
-extern char OK293[293];
-extern char OK307[307];
-extern char OK311[311];
-extern char OK313[313];
-extern char OK317[317];
-extern char OK331[331];
-extern char OK337[337];
-extern char OK347[347];
-extern char OK349[349];
-extern char OK353[353];
-extern char OK359[359];
-extern char OK367[367];
-extern char OK373[373];
-extern char OK379[379];
-extern char OK383[383];
-extern char OK389[389];
-extern char OK397[397];
-extern char OK401[401];
-extern char OK409[409];
-extern char OK419[419];
-extern char OK421[421];
-extern char OK431[431];
-extern char OK433[433];
-extern char OK439[439];
-extern char OK443[443];
-extern char OK449[449];
-extern char OK457[457];
-extern char OK461[461];
-extern char OK463[463];
-extern char OK467[467];
-extern char OK479[479];
-extern char OK487[487];
-extern char OK491[491];
-extern char OK499[499];
-extern char OK503[503];
-extern char OK509[509];
-extern char OK521[521];
-extern char OK523[523];
-extern char OK541[541];
+uint64_t OKOK61[61];
+uint64_t OKOK67[67];
+uint64_t OKOK71[71];
+uint64_t OKOK73[73];
+uint64_t OKOK79[79];
+uint64_t OKOK83[83];
+uint64_t OKOK89[89];
+uint64_t OKOK97[97];
+uint64_t OKOK101[101];
+uint64_t OKOK103[103];
+uint64_t OKOK107[107];
+uint64_t OKOK109[109];
+uint64_t OKOK113[113];
+uint64_t OKOK127[127];
+uint64_t OKOK131[131];
+uint64_t OKOK137[137];
+uint64_t OKOK139[139];
+uint64_t OKOK149[149];
+uint64_t OKOK151[151];
+uint64_t OKOK157[157];
+uint64_t OKOK163[163];
+uint64_t OKOK167[167];
+uint64_t OKOK173[173];
+uint64_t OKOK179[179];
+uint64_t OKOK181[181];
+uint64_t OKOK191[191];
+uint64_t OKOK193[193];
+uint64_t OKOK197[197];
+uint64_t OKOK199[199];
+uint64_t OKOK211[211];
+uint64_t OKOK223[223];
+uint64_t OKOK227[227];
+uint64_t OKOK229[229];
+uint64_t OKOK233[233];
+uint64_t OKOK239[239];
+uint64_t OKOK241[241];
+uint64_t OKOK251[251];
+uint64_t OKOK257[257];
+uint64_t OKOK263[263];
+uint64_t OKOK269[269];
+uint64_t OKOK271[271];
+uint64_t OKOK277[277];
 
 
 // selects elements from two vectors based on a selection mask
@@ -174,7 +68,7 @@ extern char OK541[541];
     OKOK##_X[j]=0; \
   for(j=0;j<_X;j++) \
     for(jj=0;jj<64;jj++) \
-      OKOK##_X[j]|=(((int64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj);
+      OKOK##_X[j]|=(((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj);
 
 
 void *thr_func_sse2(void *arg) {
@@ -182,15 +76,15 @@ void *thr_func_sse2(void *arg) {
 	thread_data_t *data = (thread_data_t *)arg;
 	int err;
 	int i43, i47, i53, i59;
-	int64_t n, n43, n47, n53, n59;
+	uint64_t n, n43, n47, n53, n59;
 
 	err = pthread_mutex_lock(&lock1);
 	if (err){
 		fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
 		exit(EXIT_FAILURE);
 	}
-	int64_t start = current_n43;
-	int64_t stop = start + thread_range;
+	uint64_t start = current_n43;
+	uint64_t stop = start + thread_range;
 	if(stop > numn43s){
 		stop = numn43s;
 	}
@@ -217,7 +111,7 @@ void *thr_func_sse2(void *arg) {
 									 REM(n59,113,7), REM(n59,127,7), REM(n59,131,8), REM(n59,137,8));
 
 						for(i59=(PRIME8-24);i59>0;i59--){
-							int64_t sito;
+							uint64_t sito;
 							if(sito = OKOK61[_mm_extract_epi16(r_numvec1, 7)]
 									& OKOK67[_mm_extract_epi16(r_numvec1, 6)]
 									& OKOK71[_mm_extract_epi16(r_numvec1, 5)]
@@ -262,7 +156,7 @@ void *thr_func_sse2(void *arg) {
 									& OKOK277[REM(n59,277,9)])){
 
 								int b;
-								int64_t n;
+								uint64_t n;
 								int bLimit, bStart;
 
 								bLimit = 63 - __builtin_clzll(sito);
@@ -320,7 +214,7 @@ void *thr_func_sse2(void *arg) {
 										if(OK521[n%521])
 										if(OK523[n%523])
 										if(OK541[n%541]){
-											int64_t m;
+											uint64_t m;
 											int k;
 											k=0; 
 											m = n + data->STEP * 5;
@@ -338,7 +232,7 @@ void *thr_func_sse2(void *arg) {
 											}
 
 											if(k>=10){
-												int64_t first_term = m + data->STEP;
+												uint64_t first_term = m + data->STEP;
 
 												err = pthread_mutex_lock(&lock2);
 												if (err){
@@ -418,9 +312,9 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	int i3, i5, i31, i37, i41;
 	int SHIFT;
 	int maxshift = startSHIFT+640;
-	int64_t STEP;
-	int64_t n0;
-	int64_t S31, S37, S41, S43, S47, S53, S59;
+	uint64_t STEP;
+	uint64_t n0;
+	uint64_t S31, S37, S41, S43, S47, S53, S59;
 	double d = (double)1.0 / (K_COUNT*numn43s*10);
 	double dd;
 	int j,jj,k;

@@ -294,16 +294,16 @@ void write_state(int KMIN, int KMAX, int SHIFT, int K)
 {
 	FILE *out;
 
-        if (write_state_a_next)
+	if (write_state_a_next)
 	{
 		if ((out = my_fopen(STATE_FILENAME_A,"w")) == NULL)
 			fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_A);
 	}
 	else
 	{
-                if ((out = my_fopen(STATE_FILENAME_B,"w")) == NULL)
-                        fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
-        }
+		if ((out = my_fopen(STATE_FILENAME_B,"w")) == NULL)
+			fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
+	}
 
 	if (fprintf(out,"%d %d %d %d %u %u %" PRIu64 "\n",KMIN,KMAX,SHIFT,K,cksum,totalaps,last_trickle) < 0){
 		if (write_state_a_next)
@@ -337,18 +337,18 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 	uint32_t taps_a, taps_b;
 	uint64_t trickle_a, trickle_b;
 
-        // Attempt to read state file A
+	// Attempt to read state file A
 	if ((in = my_fopen(STATE_FILENAME_A,"r")) == NULL)
-        {
+	{
 		good_state_a = false;
-        }
+	}
 	else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_a,&cksum_a,&taps_a,&trickle_a) != 7)
-        {
+	{
 		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_A);
 		good_state_a = false;
 	}
 	else
-        {
+	{
 		fclose(in);
 
 		/* Check that KMIN KMAX SHIFT all match */
@@ -357,25 +357,25 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 		}
 	}
 
-        // Attempt to read state file B
-        if ((in = my_fopen(STATE_FILENAME_B,"r")) == NULL)
-        {
-                good_state_b = false;
-        }
-        else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b,&trickle_b) != 7)
-        {
-                fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
-                good_state_b = false;
-        }
-        else
-        {
-                fclose(in);
+	// Attempt to read state file B
+	if ((in = my_fopen(STATE_FILENAME_B,"r")) == NULL)
+	{
+		good_state_b = false;
+	}
+	else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b,&trickle_b) != 7)
+	{
+		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
+		good_state_b = false;
+	}
+	else
+	{
+		fclose(in);
 
-                /* Check that KMIN KMAX SHIFT all match */
-                if (tmp1 != KMIN || tmp2 != KMAX || tmp3 != SHIFT){
-                        good_state_b = false;
-                }
-        }
+		/* Check that KMIN KMAX SHIFT all match */
+		if (tmp1 != KMIN || tmp2 != KMAX || tmp3 != SHIFT){
+				good_state_b = false;
+		}
+	}
 
         // If both state files are OK, check which is the most recent
 	if (good_state_a && good_state_b)
@@ -397,20 +397,21 @@ int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 
 		return 1;
 	}
-        if (good_state_b && !good_state_a)
-        {
-                *K = K_b;
-                cksum = cksum_b;
+	if (good_state_b && !good_state_a)
+	{
+		*K = K_b;
+		cksum = cksum_b;
 		totalaps = taps_b;
 		write_state_a_next = true;
 		last_trickle = trickle_b;
 
 		return 1;
-        }
+	}
 
 	// If we got here, neither state file was good
 	return 0;
 }
+
 
 /* 
    Returns index j where:
@@ -564,7 +565,7 @@ void checkpoint(int SHIFT, int K, int force)
 		if (results_file != NULL){
 			fclose(results_file);
 			results_file = NULL;
-                }
+		}
 
 		write_state(KMIN,KMAX,SHIFT,K);
 
@@ -668,7 +669,7 @@ int main(int argc, char *argv[])
 		K = KMIN;
 		cksum = 0; // zero result checksum for BOINC
 		totalaps = 0;  // total count of APs found
-                write_state_a_next = true;
+		write_state_a_next = true;
 
 		// clear result file
 		FILE * temp_file = my_fopen(RESULTS_FILENAME,"w");
@@ -989,7 +990,7 @@ int main(int argc, char *argv[])
 
 			checkpoint(SHIFT,K,0);
 
-                        SearchAP26(K,SHIFT,profile,computeunits,COMPUTE);
+			SearchAP26(K,SHIFT,profile,computeunits,COMPUTE);
 
 		 	K_DONE++;
 

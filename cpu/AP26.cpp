@@ -1,26 +1,11 @@
 /* 
 	AP26 Multithreaded CPU application
  	Bryan Little
- 	March 22, 2020				*/
+ 	May 13, 2023				*/
 
 
-// AP26 application version
-#define MAJORV 3
-#define MINORV 0
-#define SUFFIXV ""
-
-#include <iostream>
 #include <cinttypes>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdint.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
-#include <algorithm>
-
+#include <cstdio>
 #include <pthread.h>
 #include <thread>
 
@@ -28,7 +13,6 @@
 #include "filesys.h"
 
 #include "mainconst.h"
-#include "prime.h"
 
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
@@ -46,24 +30,225 @@ using namespace std;
 
 /* Global variables */
 static int KMIN, KMAX, K_DONE, K_COUNT;
-int result_hash;
-bool write_state_a_next;
 static FILE *results_file = NULL;
-int64_t *n43_h;
+uint64_t *n43_h;
+bool write_state_a_next;
+uint32_t cksum;
+uint64_t last_trickle;
+time_t last_ckpt;
 
 
 /////////////////////////////
 // main lock for search data
-uint32_t current_n43;
+int current_n43;
 pthread_mutex_t lock1;
 /////////////////////////////
 
 
 ///////////////////////////////////
 // lock used for reporting results
+uint32_t totalaps;
 pthread_mutex_t lock2;
 ///////////////////////////////////
 
+
+void handle_trickle_up(){
+
+	if(boinc_is_standalone()) return;
+
+	uint64_t now = (uint64_t)time(NULL);
+
+	if( (now-last_trickle) > 86400 ){	// Once per day
+
+		last_trickle = now;
+
+		double progress = boinc_get_fraction_done();
+		double cpu;
+		boinc_wu_cpu_time(cpu);
+		APP_INIT_DATA init_data;
+		boinc_get_init_data(init_data);
+		double run = boinc_elapsed_time() + init_data.starting_elapsed_time;
+
+		char msg[512];
+		sprintf(msg, "<trickle_up>\n"
+			    "   <progress>%lf</progress>\n"
+			    "   <cputime>%lf</cputime>\n"
+			    "   <runtime>%lf</runtime>\n"
+			    "</trickle_up>\n",
+			     progress, cpu, run  );
+		char variety[64];
+		sprintf(variety, "ap26_progress");
+		boinc_send_trickle_up(variety, msg);
+	}
+
+}
+
+
+/*
+	tests primality of each term of the AP sequence
+	test is good to 2^64-1
+*/
+
+
+uint64_t invert(uint64_t p)
+{
+	uint64_t p_inv = 1, prev = 0;
+	while (p_inv != prev) { prev = p_inv; p_inv *= 2 - p * p_inv; }
+	return p_inv;
+}
+
+
+uint64_t montMul(uint64_t a, uint64_t b, uint64_t p, uint64_t q)
+{
+	unsigned __int128 res;
+
+	res  = (unsigned __int128)a * b;
+	uint64_t ab0 = (uint64_t)res;
+	uint64_t ab1 = res >> 64;
+
+	uint64_t m = ab0 * q;
+
+	res = (unsigned __int128)m * p;
+	uint64_t mp = res >> 64;
+
+	uint64_t r = ab1 - mp;
+
+	return ( ab1 < mp ) ? r + p : r;
+}
+
+
+uint64_t add(uint64_t a, uint64_t b, uint64_t p)
+{
+	uint64_t r;
+
+	uint64_t c = (a >= p - b) ? p : 0;
+
+	r = a + b - c;
+
+	return r;
+}
+
+
+// initialize montgomery constants
+void mont_init(uint64_t N, int & t, uint64_t & curBit, uint64_t & exp, uint64_t & nmo, uint64_t & q, uint64_t & one, uint64_t & r2){
+
+	nmo = N-1;
+	t = __builtin_ctzll(nmo);
+	exp = N >> t;
+	curBit = 0x8000000000000000;
+	curBit >>= ( __builtin_clzll(exp) + 1 );
+	q = invert(N);
+	one = (-N) % N;
+	nmo = N - one;
+	uint64_t two = add(one, one, N);
+	r2 = add(two, two, N);
+	for (int i = 0; i < 5; ++i)
+		r2 = montMul(r2, r2, N, q);	// 4^{2^5} = 2^64
+
+}
+
+
+bool strong_prp(int base, uint64_t N, int t, uint64_t curBit, uint64_t exp, uint64_t nmo, uint64_t q, uint64_t one, uint64_t r2)
+{
+
+	/* If N is prime and N = d*2^t+1, where d is odd, then either
+		1.  a^d = 1 (mod N), or
+		2.  a^(d*2^s) = -1 (mod N) for some s in 0 <= s < t    */
+
+
+	uint64_t a = base;
+	uint64_t mbase = montMul(a,r2,N,q);  // convert base to montgomery form
+
+	a = mbase;
+
+  	/* r <-- a^d mod N, assuming d odd */
+	while( curBit )
+	{
+		a = montMul(a,a,N,q);
+
+		if(exp & curBit){
+			a = montMul(a,mbase,N,q);
+		}
+
+		curBit >>= 1;
+	}
+
+	/* Clause 1. and s = 0 case for clause 2. */
+	if (a == one || a == nmo){
+		return true;
+	}
+
+	/* 0 < s < t cases for clause 2. */
+	for (int s = 1; s < t; ++s){
+
+		a = montMul(a,a,N,q);
+
+		if(a == nmo){
+	    	return true;
+		}
+	}
+
+
+	return false;
+}
+
+
+// strong probable prime to base 2
+bool PrimeQ(uint64_t N)
+{
+	uint64_t nmo = N-1;
+	int t = __builtin_ctzll(nmo);
+	uint64_t exp = N >> t;
+	uint64_t curBit = 0x8000000000000000;
+	curBit >>= ( __builtin_clzll(exp) + 1 );
+	uint64_t q = invert(N);
+	uint64_t one = (-N) % N;
+	nmo = N - one;
+	uint64_t two = add(one, one, N);
+	
+	uint64_t a = two;
+
+	/* If N is prime and N = d*2^t+1, where d is odd, then either
+		1.  a^d = 1 (mod N), or
+		2.  a^(d*2^s) = -1 (mod N) for some s in 0 <= s < t    */
+
+  	/* r <-- a^d mod N, assuming d odd */
+	while( curBit )
+	{
+		a = montMul(a,a,N,q);
+
+		if(exp & curBit){
+			a = add(a,a,N);
+		}
+
+		curBit >>= 1;
+	}
+
+	/* Clause 1. and s = 0 case for clause 2. */
+	if (a == one || a == nmo){
+		return true;
+	}
+
+	/* 0 < s < t cases for clause 2. */
+	for (int s = 1; s < t; ++s){
+
+		a = montMul(a,a,N,q);
+
+		if(a == nmo){
+	    	return true;
+		}
+	}
+
+	return false;
+}
+
+
+void ckerr(int err){
+	if(err){
+		fprintf(stderr, "ERROR: pthreads, code: %d\n", err);
+		exit(EXIT_FAILURE);
+	}
+}
 
 int boinc_standalone()
 {
@@ -73,10 +258,10 @@ int boinc_standalone()
 
 static FILE *my_fopen(const char *filename, const char *mode)
 {
-  char resolved_name[512];
+	char resolved_name[512];
 
-  boinc_resolve_filename(filename,resolved_name,sizeof(resolved_name));
-  return boinc_fopen(resolved_name,mode);
+	boinc_resolve_filename(filename,resolved_name,sizeof(resolved_name));
+	return boinc_fopen(resolved_name,mode);
 }
 
 
@@ -91,59 +276,51 @@ void Progress(double prog){
 }
 
 
-// Bryan Little 6-9-2016
-// BOINC result hash calculation, write to solution file, and close.
-// The hash function is a 16 char hexadecimal string used to compare results found by different computers in a BOINC quorum.
-// The hash can be used to compare results between GPU and CPU clients.
-// It also prevents the server from having to validate every AP10+ reported by clients, which can be in different orders depending on GPU.
-// It contains information about the assigned workunit and all APs found of length 10 or larger.
-static void write_hash()
+// BOINC checksum calculation, write to solution file, and close.
+void write_cksum()
 {
-	// calculate the top 32bits of the hash based on assigned workunit range
 	uint64_t minmax = KMIN + KMAX;
-	// check to make sure we don't overflow a 32bit signed int with large K values
+
 	while(minmax > MAXINTV){
 		minmax -= MAXINTV;
 	}
 
-	// top 32 bits are workunit range... bottom 32 bits are solutions found
+	uint64_t bchecksum = (uint64_t)( (minmax << 32) | cksum);
 
-	int64_t hash = (int64_t)( (minmax << 32) | result_hash);
+	FILE* res_file = my_fopen(RESULTS_FILENAME,"a");
 
-	if (results_file == NULL)
-		results_file = my_fopen(RESULTS_FILENAME,"a");
-
-	if (results_file == NULL){
+	if (res_file == NULL){
 		fprintf(stderr,"Cannot open %s !!!\n",RESULTS_FILENAME);
 		exit(EXIT_FAILURE);
 	}
 
-	if (fprintf(results_file,"%016" PRIX64 "\n",hash)<0){
+	if (fprintf(res_file,"%016" PRIX64 "\n",bchecksum)<0){
 		fprintf(stderr,"Cannot write to %s !!!\n",RESULTS_FILENAME);
 		exit(EXIT_FAILURE);
 	}
 
-	fclose(results_file);
+	fclose(res_file);
 
 }
 
 
-static void write_state(int KMIN, int KMAX, int SHIFT, int K)
+
+void write_state(int KMIN, int KMAX, int SHIFT, int K)
 {
 	FILE *out;
 
-        if (write_state_a_next)
+	if (write_state_a_next)
 	{
 		if ((out = my_fopen(STATE_FILENAME_A,"w")) == NULL)
 			fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_A);
 	}
 	else
 	{
-                if ((out = my_fopen(STATE_FILENAME_B,"w")) == NULL)
-                        fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
-        }
+		if ((out = my_fopen(STATE_FILENAME_B,"w")) == NULL)
+			fprintf(stderr,"Cannot open %s !!!\n",STATE_FILENAME_B);
+	}
 
-	if (fprintf(out,"%d %d %d %d %d\n",KMIN,KMAX,SHIFT,K,result_hash) < 0){
+	if (fprintf(out,"%d %d %d %d %u %u %" PRIu64 "\n",KMIN,KMAX,SHIFT,K,cksum,totalaps,last_trickle) < 0){
 		if (write_state_a_next)
 			fprintf(stderr,"Cannot write to %s !!! Continuing...\n",STATE_FILENAME_A);
 		else
@@ -164,26 +341,29 @@ static void write_state(int KMIN, int KMAX, int SHIFT, int K)
    Attempts to read from both state files,
    uses the most recent one available.
  */
-static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
+int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 {
 	FILE *in;
 	bool good_state_a = true;
 	bool good_state_b = true;
 	int tmp1, tmp2, tmp3;
-	int K_a, hash_a, K_b, hash_b;
+	int K_a, K_b;
+	uint32_t cksum_a, cksum_b;
+	uint32_t taps_a, taps_b;
+	uint64_t trickle_a, trickle_b;
 
-        // Attempt to read state file A
+	// Attempt to read state file A
 	if ((in = my_fopen(STATE_FILENAME_A,"r")) == NULL)
-        {
+	{
 		good_state_a = false;
-        }
-	else if (fscanf(in,"%d %d %d %d %d\n",&tmp1,&tmp2,&tmp3,&K_a,&hash_a) != 5)
-        {
+	}
+	else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_a,&cksum_a,&taps_a,&trickle_a) != 7)
+	{
 		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_A);
 		good_state_a = false;
 	}
 	else
-        {
+	{
 		fclose(in);
 
 		/* Check that KMIN KMAX SHIFT all match */
@@ -192,25 +372,25 @@ static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 		}
 	}
 
-        // Attempt to read state file B
-        if ((in = my_fopen(STATE_FILENAME_B,"r")) == NULL)
-        {
-                good_state_b = false;
-        }
-        else if (fscanf(in,"%d %d %d %d %d\n",&tmp1,&tmp2,&tmp3,&K_b,&hash_b) != 5)
-        {
-                fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
-                good_state_b = false;
-        }
-        else
-        {
-                fclose(in);
+	// Attempt to read state file B
+	if ((in = my_fopen(STATE_FILENAME_B,"r")) == NULL)
+	{
+		good_state_b = false;
+	}
+	else if (fscanf(in,"%d %d %d %d %u %u %" PRIu64 "\n",&tmp1,&tmp2,&tmp3,&K_b,&cksum_b,&taps_b,&trickle_b) != 7)
+	{
+		fprintf(stderr,"Cannot parse %s !!!\n",STATE_FILENAME_B);
+		good_state_b = false;
+	}
+	else
+	{
+		fclose(in);
 
-                /* Check that KMIN KMAX SHIFT all match */
-                if (tmp1 != KMIN || tmp2 != KMAX || tmp3 != SHIFT){
-                        good_state_b = false;
-                }
-        }
+		/* Check that KMIN KMAX SHIFT all match */
+		if (tmp1 != KMIN || tmp2 != KMAX || tmp3 != SHIFT){
+				good_state_b = false;
+		}
+	}
 
         // If both state files are OK, check which is the most recent
 	if (good_state_a && good_state_b)
@@ -225,31 +405,37 @@ static int read_state(int KMIN, int KMAX, int SHIFT, int *K)
 	if (good_state_a && !good_state_b)
 	{
 		*K = K_a;
-		result_hash = hash_a;
+		cksum = cksum_a;
+		totalaps = taps_a;
 		write_state_a_next = false;
+		last_trickle = trickle_a;
+
 		return 1;
 	}
-        if (good_state_b && !good_state_a)
-        {
-                *K = K_b;
-                result_hash = hash_b;
+	if (good_state_b && !good_state_a)
+	{
+		*K = K_b;
+		cksum = cksum_b;
+		totalaps = taps_b;
 		write_state_a_next = true;
+		last_trickle = trickle_b;
+
 		return 1;
-        }
+	}
 
 	// If we got here, neither state file was good
 	return 0;
 }
 
-/* Bryan Little 9-28-2015
-   Bryan Little - added to CPU code 6-9-2016
+
+/* 
    Returns index j where:
    0<=j<k ==> f+j*d*23# is composite.
    j=k    ==> for all 0<=j<k, f+j*d*23# is a strong probable prime to base 2 only.
 */
-static int val_base2_ap26(int k, int d, int64_t f)
+int val_base2_ap26(int k, int d, uint64_t f)
 {
-	int64_t N;
+	uint64_t N;
 	int j;
 
 	if (f%2==0)
@@ -257,62 +443,82 @@ static int val_base2_ap26(int k, int d, int64_t f)
 
 	for (j = 0, N = f; j < k; j++){
 
-		if (!strong_prp(2,N))
+		int t;
+		uint64_t curBit, exp, nmo, q, one, r2;
+
+		mont_init(N, t, curBit, exp, nmo, q, one, r2);
+
+		if (!strong_prp(2, N, t, curBit, exp, nmo, q, one, r2))
 			return j;
 
-		N += (int64_t)d*2*3*5*7*11*13*17*19*23;
+		N += (uint64_t)d*2*3*5*7*11*13*17*19*23;
 	}
 
 	return j;
 }
 
-/*   Bryan Little - added to CPU code 6-9-2016
+/*
    Returns index j where:
    0<=j<k ==> f+j*d*23# is composite.
-   j=k    ==> for all 0<=j<k, f+j*d*23# is a strong probable prime to 9 bases.
+   j=k    ==> for all 0<=j<k, f+j*d*23# is prime
+
+   test is good to 2^64-1
 */
-static int validate_ap26(int k, int d, int64_t f)
+int validate_ap26(int k, int d, uint64_t f)
 {
-  int64_t N;
-  int j;
+	uint64_t N;
+	int j;
 
-  const int base[] = {2,3,5,7,11,13,17,19,23};
+	const int base[12] = {2,3,5,7,11,13,17,19,23,29,31,37};
 
-  if (f%2==0)
-    return 0;
+	if (f%2==0){
+		return 0;
+	}
 
 
-  for (j = 0, N = f; j < k; j++)
-  {
+	for (j = 0, N = f; j < k; ++j){
 
-    int i;
+		int t;
+		uint64_t curBit, exp, nmo, q, one, r2;
 
-    for (i = 0; i < sizeof(base)/sizeof(int); i++)
-      if (!strong_prp(base[i],N))
-        return j;
+		mont_init(N, t, curBit, exp, nmo, q, one, r2);
 
-    N += (int64_t)d*2*3*5*7*11*13*17*19*23;
-  }
+		if ( N < 3825123056546413051ULL ){
+			for (int i = 0; i < 9; ++i){
+				if (!strong_prp(base[i], N, t, curBit, exp, nmo, q, one, r2)){
+					return j;
+				}
+			}
+		}
+		else if ( N <= UINT64_MAX ){
+			for (int i = 0; i < 12; ++i){
+				if (!strong_prp(base[i], N, t, curBit, exp, nmo, q, one, r2)){
+					return j;
+				}
+			}
+		}
 
-  return j;
+		N += (uint64_t)d*2*3*5*7*11*13*17*19*23;
+	}
+
+	return j;
 }
+
 
 // Bryan Little 9-28-2015
 // Bryan Little - added to CPU code 6-9-2016
 // Changed function to check ALL solutions for validity, not just solutions >= MINIMUM_AP_LENGTH_TO_REPORT
 // CPU does a prp base 2 check only. It will sometimes report an AP with a base 2 probable prime.
-void ReportSolution(int AP_Length,int difference,int64_t First_Term)
+void ReportSolution(int AP_Length, int difference, uint64_t First_Term)
 {
 
 	int i;
 
-	/* 	hash for BOINC quorum
-		we create a hash based on each AP10+ result mod 1000
-		and that result's AP length  	*/
-	result_hash += First_Term % 1000;
-	result_hash += AP_Length;
-	if(result_hash > MAXINTV){
-		result_hash -= MAXINTV;
+	/*	add each AP10+ first_term mod 1000 and that AP's length to checksum	*/
+	cksum += First_Term % 1000;
+	cksum += AP_Length;
+	if(cksum > MAXINTV){
+		cksum -= MAXINTV;
 	}
 
 	i = validate_ap26(AP_Length,difference,First_Term);
@@ -366,17 +572,19 @@ void ReportSolution(int AP_Length,int difference,int64_t First_Term)
 void checkpoint(int SHIFT, int K, int force)
 {
 	double d;
+	time_t curr_time;
 
-	if (force || boinc_time_to_checkpoint()){
+	time(&curr_time);
+	int diff = (int)curr_time - (int)last_ckpt;
+
+	if( diff > 60 || force ){
+
+		last_ckpt = curr_time;
 
 		if (results_file != NULL){
-			fflush(results_file);
-#if defined (_WIN32)
-			_commit(_fileno(results_file));
-#else
-			fsync(fileno(results_file));
-#endif
-                }
+			fclose(results_file);
+			results_file = NULL;
+		}
 
 		write_state(KMIN,KMAX,SHIFT,K);
 
@@ -384,17 +592,10 @@ void checkpoint(int SHIFT, int K, int force)
 			printf("Checkpoint: KMIN:%d KMAX:%d SHIFT:%d K:%d\n",KMIN,KMAX,SHIFT,K);
 		}
 
-		if (!force)
-			boinc_checkpoint_completed();
-	}
+		boinc_checkpoint_completed();
 
-	if(force){
-		if (K_COUNT > 0)
-			d = (double)(K_DONE / K_COUNT);
-		else
-			d = 1.0;
+		handle_trickle_up();
 
-		boinc_fraction_done(d);
 	}
 
 }
@@ -413,37 +614,30 @@ int main(int argc, char *argv[])
 	int i, K, SHIFT, err;
 	int num_threads = 1;
 
-        // Initialize BOINC
-        BOINC_OPTIONS options;
-        boinc_options_defaults(options);
+	// Initialize BOINC
+	BOINC_OPTIONS options;
+	boinc_options_defaults(options);
 	options.multi_thread = true; 
-        boinc_init_options(&options);
+	boinc_init_options(&options);
+		
+	n43_h = (uint64_t*)malloc(numn43s * sizeof(uint64_t));		
 
-	// initialize pthread mutex
-	err = pthread_mutex_init(&lock1, NULL);
-	if (err){
-		fprintf(stderr, "ERROR: pthread_mutex_init, code: %d\n", err);
-		exit(EXIT_FAILURE);
-	}
-	err = pthread_mutex_init(&lock2, NULL);
-	if (err){
-		fprintf(stderr, "ERROR: pthread_mutex_init, code: %d\n", err);
-		exit(EXIT_FAILURE);
-	}
+	ckerr(pthread_mutex_init(&lock1, NULL));
+	ckerr(pthread_mutex_init(&lock2, NULL));
 
-	fprintf(stderr, "AP26 CPU 10-shift search version %d.%d%s by Bryan Little and Iain Bethune\n",MAJORV,MINORV,SUFFIXV);
+	fprintf(stderr, "AP26 CPU 10-shift search version %s by Bryan Little\n",VERS);
 	fprintf(stderr, "Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 
 	if(boinc_is_standalone()){
-		printf("AP26 CPU 10-shift search version %d.%d%s by Bryan Little and Iain Bethune\n",MAJORV,MINORV,SUFFIXV);
+		printf("AP26 CPU 10-shift search version %s by Bryan Little\n",VERS);
 		printf("Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 	}
 
 	// Print out cmd line for diagnostics
-        fprintf(stderr, "Command line: ");
-        for (i = 0; i < argc; i++)
-        	fprintf(stderr, "%s ", argv[i]);
-        fprintf(stderr, "\n");
+	fprintf(stderr, "Command line: ");
+	for (i = 0; i < argc; i++)
+		fprintf(stderr, "%s ", argv[i]);
+	fprintf(stderr, "\n");
 
 
 	/* Get search parameters from command line */
@@ -462,13 +656,13 @@ int main(int argc, char *argv[])
 	int sse41 = __builtin_cpu_supports("sse4.1");
 	int avx = __builtin_cpu_supports("avx");
 	int avx2 = __builtin_cpu_supports("avx2");
-	int avx512 = __builtin_cpu_supports("avx512dq");
+	int avx512 = __builtin_cpu_supports("avx512bw") && __builtin_cpu_supports("avx512vl");
 
 	if(avx512){
 		if(boinc_is_standalone()){
-			printf("Detected avx512dq CPU\n");
+			printf("Detected avx512 CPU\n");
 		}
-		fprintf(stderr, "Detected avx512dq CPU\n");
+		fprintf(stderr, "Detected avx512 CPU\n");
 	}
 	else if(avx2){
 		if(boinc_is_standalone()){
@@ -607,14 +801,14 @@ int main(int argc, char *argv[])
 			}
 			else if( strcmp(argv[xv], "-avx512") == 0 ){
 				if(boinc_is_standalone()){
-					printf("forcing avx512dq mode\n");
+					printf("forcing avx512 mode\n");
 				}
-				fprintf(stderr, "forcing avx512dq mode\n");
+				fprintf(stderr, "forcing avx512 mode\n");
 				if(avx512 == 0){
 					if(boinc_is_standalone()){
-						printf("ERROR: CPU does not support avx512dq instructions!\n");
+						printf("ERROR: CPU does not support avx512 instructions!\n");
 					}
-					fprintf(stderr, "ERROR: CPU does not support avx512dq instructions!\n");
+					fprintf(stderr, "ERROR: CPU does not support avx512 instructions!\n");
 					exit(EXIT_FAILURE);
 				}
 				sse41 = 0;
@@ -638,8 +832,9 @@ int main(int argc, char *argv[])
 			printf("Beginning a new search with parameters from the command line\n");
 		}
 		K = KMIN;
-		result_hash = 0; // zero result hash for BOINC
-                write_state_a_next = true;
+		cksum = 0; // zero result checksum for BOINC
+		totalaps = 0;  // total count of APs found
+		write_state_a_next = true;
 
 		// clear result file
 		FILE * temp_file = my_fopen(RESULTS_FILENAME,"w");
@@ -648,6 +843,9 @@ int main(int argc, char *argv[])
 			exit(EXIT_FAILURE);
 		}
 		fclose(temp_file);
+		
+		// setup boinc trickle up
+		last_trickle = (uint64_t)time(NULL);		
 	}
 
 	//trying to resume a finished workunit
@@ -671,19 +869,11 @@ int main(int argc, char *argv[])
 	}
 
 
-        n43_h = (int64_t*)malloc(numn43s * sizeof(int64_t));
-
-
 	/* Top-level loop */
 	for (; K <= KMAX; ++K){
 		if (will_search(K)){
 
-			if(boinc_is_standalone()){
-				checkpoint(SHIFT,K,1);
-			}
-			else{
-				checkpoint(SHIFT,K,0);
-			}
+			checkpoint(SHIFT,K,0);
 
 			if(avx512){
 				Search_avx512(K, SHIFT, K_COUNT, K_DONE, num_threads);
@@ -708,11 +898,10 @@ int main(int argc, char *argv[])
 
 
 	boinc_begin_critical_section();
-	/* Force Final checkpoint */
+	boinc_fraction_done(1.0);
 	checkpoint(SHIFT,K,1);
-	/* Write BOINC hash to file */
-	write_hash();
-	fprintf(stderr,"Workunit complete.\n");
+	write_cksum();
+	fprintf(stderr,"Workunit complete.  Number of AP10+ found %u\n", totalaps);
 	boinc_end_critical_section();
 
 	free(n43_h);

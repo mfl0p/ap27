@@ -1,61 +1,191 @@
 // cpuconst.h
 
+extern uint64_t *n43_h;
 
-extern int64_t *n43_h;
+extern __m128i svec1, svec2, mvec1, mvec2, numvec1_1, numvec2_1, numvec1_2, numvec2_2, zerovec_avx;
+extern __m256i svec, mvec, numvec1, numvec2, zerovec;
+
+
+extern char OK61[61];
+extern char OK67[67];
+extern char OK71[71];
+extern char OK73[73];
+extern char OK79[79];
+extern char OK83[83];
+extern char OK89[89];
+extern char OK97[97];
+extern char OK101[101];
+extern char OK103[103];
+extern char OK107[107];
+extern char OK109[109];
+extern char OK113[113];
+extern char OK127[127];
+extern char OK131[131];
+extern char OK137[137];
+extern char OK139[139];
+extern char OK149[149];
+extern char OK151[151];
+extern char OK157[157];
+extern char OK163[163];
+extern char OK167[167];
+extern char OK173[173];
+extern char OK179[179];
+extern char OK181[181];
+extern char OK191[191];
+extern char OK193[193];
+extern char OK197[197];
+extern char OK199[199];
+extern char OK211[211];
+extern char OK223[223];
+extern char OK227[227];
+extern char OK229[229];
+extern char OK233[233];
+extern char OK239[239];
+extern char OK241[241];
+extern char OK251[251];
+extern char OK257[257];
+extern char OK263[263];
+extern char OK269[269];
+extern char OK271[271];
+extern char OK277[277];
+extern char OK281[281];
+extern char OK283[283];
+extern char OK293[293];
+extern char OK307[307];
+extern char OK311[311];
+extern char OK313[313];
+extern char OK317[317];
+extern char OK331[331];
+extern char OK337[337];
+extern char OK347[347];
+extern char OK349[349];
+extern char OK353[353];
+extern char OK359[359];
+extern char OK367[367];
+extern char OK373[373];
+extern char OK379[379];
+extern char OK383[383];
+extern char OK389[389];
+extern char OK397[397];
+extern char OK401[401];
+extern char OK409[409];
+extern char OK419[419];
+extern char OK421[421];
+extern char OK431[431];
+extern char OK433[433];
+extern char OK439[439];
+extern char OK443[443];
+extern char OK449[449];
+extern char OK457[457];
+extern char OK461[461];
+extern char OK463[463];
+extern char OK467[467];
+extern char OK479[479];
+extern char OK487[487];
+extern char OK491[491];
+extern char OK499[499];
+extern char OK503[503];
+extern char OK509[509];
+extern char OK521[521];
+extern char OK523[523];
+extern char OK541[541];
+
+extern __m256d xOKOK61[61];
+extern __m256d xOKOK67[67];
+extern __m256d xOKOK71[71];
+extern __m256d xOKOK73[73];
+extern __m256d xOKOK79[79];
+extern __m256d xOKOK83[83];
+extern __m256d xOKOK89[89];
+extern __m256d xOKOK97[97];
+extern __m256d xOKOK101[101];
+extern __m256d xOKOK103[103];
+extern __m256d xOKOK107[107];
+extern __m256d xOKOK109[109];
+extern __m256d xOKOK113[113];
+extern __m256d xOKOK127[127];
+extern __m256d xOKOK131[131];
+extern __m256d xOKOK137[137];
+extern __m256d xOKOK139[139];
+extern __m256d xOKOK149[149];
+extern __m256d xOKOK151[151];
+extern __m256d xOKOK157[157];
+extern __m256d xOKOK163[163];
+extern __m256d xOKOK167[167];
+extern __m256d xOKOK173[173];
+extern __m256d xOKOK179[179];
+extern __m256d xOKOK181[181];
+extern __m256d xOKOK191[191];
+extern __m256d xOKOK193[193];
+extern __m256d xOKOK197[197];
+extern __m256d xOKOK199[199];
+extern __m256d xOKOK211[211];
+extern __m256d xOKOK223[223];
+extern __m256d xOKOK227[227];
+extern __m256d xOKOK229[229];
+extern __m256d xOKOK233[233];
+extern __m256d xOKOK239[239];
+extern __m256d xOKOK241[241];
+extern __m256d xOKOK251[251];
+extern __m256d xOKOK257[257];
+extern __m256d xOKOK263[263];
+extern __m256d xOKOK269[269];
+extern __m256d xOKOK271[271];
+extern __m256d xOKOK277[277];
 
 
 /////////////////////////////
 // main lock for search data
-extern uint32_t current_n43;
+extern int current_n43;
 extern pthread_mutex_t lock1;
 /////////////////////////////
 
 
 ///////////////////////////////////
 // lock used for reporting results
+extern uint32_t totalaps;
 extern pthread_mutex_t lock2;
 ///////////////////////////////////
 
 
 typedef struct _thread_data_t {
-	int id;
-	int K;
-	int SHIFT;
-	int64_t STEP, S43, S47, S53, S59;
+	uint64_t STEP, S43, S47, S53, S59;
+	int id, K, SHIFT, iteration, K_COUNT, K_DONE;
 } thread_data_t;
 
 
 // located in AP26.cpp
 extern void Progress(double prog);
-extern void ReportSolution(int AP_Length,int difference,int64_t First_Term);
-extern int PrimeQ(int64_t N);
+extern void ReportSolution(int AP_Length, int difference, uint64_t First_Term);
+extern bool PrimeQ(uint64_t N);
 extern int boinc_standalone(void);
+extern void ckerr(int err);
 
 
 #define thread_range 50
 #define numn43s	10840
 
-#define PRIM23 INT64_C(223092870)
-#define PRIME1 29
-#define PRIME2 31
-#define PRIME3 37
-#define PRIME4 41
-#define PRIME5 43
-#define PRIME6 47
-#define PRIME7 53
-#define PRIME8 59
-#define MOD  INT64_C(258559632607830)
-#define N0  INT64_C(106990415896110)
-#define N30  INT64_C(94805198622871)
-#define S3 INT64_C(172373088405220)
-#define S5 INT64_C(51711926521566)
-#define PRES2 INT64_C(16681266619860)
-#define PRES3 INT64_C(181690552643340)
-#define PRES4 INT64_C(132432982555230)
-#define PRES5 INT64_C(126273308948010)
-#define PRES6 INT64_C(115526644356690)
-#define PRES7 INT64_C(48784836341100)
-#define PRES8 INT64_C(100794433050510)
+#define PRIM23	UINT64_C(223092870)
+#define PRIME1	29
+#define PRIME2	31
+#define PRIME3	37
+#define PRIME4	41
+#define PRIME5	43
+#define PRIME6	47
+#define PRIME7	53
+#define PRIME8	59
+#define MOD		UINT64_C(258559632607830)
+#define N0		UINT64_C(106990415896110)
+#define N30		UINT64_C(94805198622871)
+#define S3		UINT64_C(172373088405220)
+#define S5		UINT64_C(51711926521566)
+#define PRES2	UINT64_C(16681266619860)
+#define PRES3	UINT64_C(181690552643340)
+#define PRES4	UINT64_C(132432982555230)
+#define PRES5	UINT64_C(126273308948010)
+#define PRES6	UINT64_C(115526644356690)
+#define PRES7	UINT64_C(48784836341100)
+#define PRES8	UINT64_C(100794433050510)
 
 /* These constants were generated with the PARI/GP command:
      forprime(p=61,331,print("#define INV",p," UINT64_C(",2^64\p,")"))

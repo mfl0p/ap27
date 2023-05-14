@@ -1,36 +1,13 @@
 /* cpuavx2.cpp --
 
-   AVX2 support 30 July 2016 by Bryan Little
-   Sieve arrays sized to fit in 256kbyte L2 cache
-
-   Floating point bitwise AND is faster than integer.
-   Probably because integer units are calculating the array index.
-
-   Blend and count zeros by Sebastian Jaworowicz
-
-   See http://www.math.uni.wroc.pl/~jwr/AP26/AP26v3.pdf for information
-   about how the algorithm works and for the copyleft notice.
 */
 
 #include <x86intrin.h>
-#include <iostream>
 #include <cinttypes>
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdint.h>
-#include <time.h>
-#include <string.h>
-#include <unistd.h>
-#include <algorithm>
-
+#include <cstdio>
 #include <pthread.h>
-#include <thread>
 
 #include "cpuconst.h"
-
-extern __m256i svec, mvec, numvec1, numvec2, zerovec; // avx2, avx512
 
 // m256 arrays total 223296 bytes
 __m256d xOKOK61[61];
@@ -76,90 +53,6 @@ __m256d xOKOK269[269];
 __m256d xOKOK271[271];
 __m256d xOKOK277[277];
 
-extern char OK61[61];
-extern char OK67[67];
-extern char OK71[71];
-extern char OK73[73];
-extern char OK79[79];
-extern char OK83[83];
-extern char OK89[89];
-extern char OK97[97];
-extern char OK101[101];
-extern char OK103[103];
-extern char OK107[107];
-extern char OK109[109];
-extern char OK113[113];
-extern char OK127[127];
-extern char OK131[131];
-extern char OK137[137];
-extern char OK139[139];
-extern char OK149[149];
-extern char OK151[151];
-extern char OK157[157];
-extern char OK163[163];
-extern char OK167[167];
-extern char OK173[173];
-extern char OK179[179];
-extern char OK181[181];
-extern char OK191[191];
-extern char OK193[193];
-extern char OK197[197];
-extern char OK199[199];
-extern char OK211[211];
-extern char OK223[223];
-extern char OK227[227];
-extern char OK229[229];
-extern char OK233[233];
-extern char OK239[239];
-extern char OK241[241];
-extern char OK251[251];
-extern char OK257[257];
-extern char OK263[263];
-extern char OK269[269];
-extern char OK271[271];
-extern char OK277[277];
-extern char OK281[281];
-extern char OK283[283];
-extern char OK293[293];
-extern char OK307[307];
-extern char OK311[311];
-extern char OK313[313];
-extern char OK317[317];
-extern char OK331[331];
-extern char OK337[337];
-extern char OK347[347];
-extern char OK349[349];
-extern char OK353[353];
-extern char OK359[359];
-extern char OK367[367];
-extern char OK373[373];
-extern char OK379[379];
-extern char OK383[383];
-extern char OK389[389];
-extern char OK397[397];
-extern char OK401[401];
-extern char OK409[409];
-extern char OK419[419];
-extern char OK421[421];
-extern char OK431[431];
-extern char OK433[433];
-extern char OK439[439];
-extern char OK443[443];
-extern char OK449[449];
-extern char OK457[457];
-extern char OK461[461];
-extern char OK463[463];
-extern char OK467[467];
-extern char OK479[479];
-extern char OK487[487];
-extern char OK491[491];
-extern char OK499[499];
-extern char OK503[503];
-extern char OK509[509];
-extern char OK521[521];
-extern char OK523[523];
-extern char OK541[541];
-
 
 // selects elements from two vectors based on a selection mask
 #define vec_sel(_X, _Y, _Z) _mm256_blendv_epi8(_X, _Y, _Z)
@@ -182,13 +75,13 @@ extern char OK541[541];
     dOKOK=0; \
     for(jj=0;jj<64;jj++){ \
       if(SHIFT < maxshift) \
-        aOKOK|=(((int64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj); \
+        aOKOK|=(((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj); \
       if(SHIFT+64 < maxshift) \
-        bOKOK|=(((int64_t)OK##_X[(j+(jj+SHIFT+64)*MOD)%_X])<<jj); \
+        bOKOK|=(((uint64_t)OK##_X[(j+(jj+SHIFT+64)*MOD)%_X])<<jj); \
       if(SHIFT+128 < maxshift) \
-        cOKOK|=(((int64_t)OK##_X[(j+(jj+SHIFT+128)*MOD)%_X])<<jj); \
+        cOKOK|=(((uint64_t)OK##_X[(j+(jj+SHIFT+128)*MOD)%_X])<<jj); \
       if(SHIFT+192 < maxshift) \
-        dOKOK|=(((int64_t)OK##_X[(j+(jj+SHIFT+192)*MOD)%_X])<<jj); \
+        dOKOK|=(((uint64_t)OK##_X[(j+(jj+SHIFT+192)*MOD)%_X])<<jj); \
     } \
     xOKOK##_X[j] = _mm256_castsi256_pd ( _mm256_set_epi64x( aOKOK, bOKOK, cOKOK, dOKOK) ); \
   }
@@ -199,15 +92,15 @@ void *thr_func_avx2(void *arg) {
 	thread_data_t *data = (thread_data_t *)arg;
 	int err;
 	int i43, i47, i53, i59;
-	int64_t n, n43, n47, n53, n59;
+	uint64_t n, n43, n47, n53, n59;
 
 	err = pthread_mutex_lock(&lock1);
 	if (err){
 		fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
 		exit(EXIT_FAILURE);
 	}
-	int64_t start = current_n43;
-	int64_t stop = start + thread_range;
+	uint64_t start = current_n43;
+	uint64_t stop = start + thread_range;
 	if(stop > numn43s){
 		stop = numn43s;
 	}
@@ -279,7 +172,7 @@ void *thr_func_avx2(void *arg) {
 							if( continue_sito(dsito) ){
 
 								__m256i isito = _mm256_castpd_si256( dsito );
-								int64_t sito[4];
+								uint64_t sito[4];
 
 								sito[0] = _mm256_extract_epi64( isito, 3 );
 								sito[1] = _mm256_extract_epi64( isito, 2 );
@@ -289,7 +182,7 @@ void *thr_func_avx2(void *arg) {
 								for(int ii=0;ii<4;++ii){
 									if(sito[ii]){
 										int b;
-										int64_t n;
+										uint64_t n;
 										int bLimit, bStart;
 
 										bLimit = 63 - __builtin_clzll(sito[ii]);
@@ -347,7 +240,7 @@ void *thr_func_avx2(void *arg) {
 												if(OK521[n%521])
 												if(OK523[n%523])
 												if(OK541[n%541]){
-													int64_t m;
+													uint64_t m;
 													int k;
 													k=0; 
 													m = n + data->STEP * 5;
@@ -365,7 +258,7 @@ void *thr_func_avx2(void *arg) {
 													}
 
 													if(k>=10){
-														int64_t first_term = m + data->STEP;
+														uint64_t first_term = m + data->STEP;
 
 														err = pthread_mutex_lock(&lock2);
 														if (err){
@@ -441,14 +334,14 @@ void Search_avx2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	int i3, i5, i31, i37, i41;
 	int SHIFT;
 	int maxshift = startSHIFT+640;
-	int64_t STEP;
-	int64_t n0;
-	int64_t S31, S37, S41, S43, S47, S53, S59;
+	uint64_t STEP;
+	uint64_t n0;
+	uint64_t S31, S37, S41, S43, S47, S53, S59;
 	double d = (double)1.0 / (K_COUNT*numn43s*3);
 	double dd;
 	int j,jj,k;
 	int err;
-	int64_t aOKOK,bOKOK,cOKOK,dOKOK;
+	uint64_t aOKOK,bOKOK,cOKOK,dOKOK;
 
 	time_t start_time, finish_time, boinc_last, boinc_curr;
 
