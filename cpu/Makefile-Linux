@@ -1,7 +1,7 @@
 CC = g++
 LD = $(CC)
 
-VER = 23_5_16
+VER = 23_5_17
 
 APP = ap26_cpu_linux64_$(VER)
 

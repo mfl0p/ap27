@@ -90,6 +90,49 @@ extern char OK521[521];
 extern char OK523[523];
 extern char OK541[541];
 
+extern __m128i ixOKOK61[61];
+extern __m128i ixOKOK67[67];
+extern __m128i ixOKOK71[71];
+extern __m128i ixOKOK73[73];
+extern __m128i ixOKOK79[79];
+extern __m128i ixOKOK83[83];
+extern __m128i ixOKOK89[89];
+extern __m128i ixOKOK97[97];
+extern __m128i ixOKOK101[101];
+extern __m128i ixOKOK103[103];
+extern __m128i ixOKOK107[107];
+extern __m128i ixOKOK109[109];
+extern __m128i ixOKOK113[113];
+extern __m128i ixOKOK127[127];
+extern __m128i ixOKOK131[131];
+extern __m128i ixOKOK137[137];
+extern __m128i ixOKOK139[139];
+extern __m128i ixOKOK149[149];
+extern __m128i ixOKOK151[151];
+extern __m128i ixOKOK157[157];
+extern __m128i ixOKOK163[163];
+extern __m128i ixOKOK167[167];
+extern __m128i ixOKOK173[173];
+extern __m128i ixOKOK179[179];
+extern __m128i ixOKOK181[181];
+extern __m128i ixOKOK191[191];
+extern __m128i ixOKOK193[193];
+extern __m128i ixOKOK197[197];
+extern __m128i ixOKOK199[199];
+extern __m128i ixOKOK211[211];
+extern __m128i ixOKOK223[223];
+extern __m128i ixOKOK227[227];
+extern __m128i ixOKOK229[229];
+extern __m128i ixOKOK233[233];
+extern __m128i ixOKOK239[239];
+extern __m128i ixOKOK241[241];
+extern __m128i ixOKOK251[251];
+extern __m128i ixOKOK257[257];
+extern __m128i ixOKOK263[263];
+extern __m128i ixOKOK269[269];
+extern __m128i ixOKOK271[271];
+extern __m128i ixOKOK277[277];
+
 extern __m256d xOKOK61[61];
 extern __m256d xOKOK67[67];
 extern __m256d xOKOK71[71];
@@ -139,7 +182,6 @@ extern __m256d xOKOK277[277];
 extern int current_n43;
 extern pthread_mutex_t lock1;
 /////////////////////////////
-
 
 ///////////////////////////////////
 // lock used for reporting results

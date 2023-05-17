@@ -143,6 +143,8 @@ __m512i xxOKOK277[277];
 // true if any element is not zero
 #define continue_sito(_X) _mm512_cmpneq_epi64_mask(_X, ZERO512)
 
+#define continue_sito_128(_X) !_mm_testz_si128(_X,_X)
+
 
 #define MAKE_OK(_X) \
   for(j=0;j<_X;j++) \
@@ -162,25 +164,109 @@ __m512i xxOKOK277[277];
     sOKOK[6]=0; \
     sOKOK[7]=0; \
     for(jj=0;jj<64;jj++){ \
-      if(SHIFT < maxshift) \
-        sOKOK[0] |= (((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj); \
-      if(SHIFT+64 < maxshift) \
-        sOKOK[1] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+64)*MOD)%_X])<<jj); \
-      if(SHIFT+128 < maxshift) \
-        sOKOK[2] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+128)*MOD)%_X])<<jj); \
-      if(SHIFT+192 < maxshift) \
-        sOKOK[3] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+192)*MOD)%_X])<<jj); \
-      if(SHIFT+256 < maxshift) \
-        sOKOK[4] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+256)*MOD)%_X])<<jj); \
-      if(SHIFT+320 < maxshift) \
-        sOKOK[5] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+320)*MOD)%_X])<<jj); \
-      if(SHIFT+384 < maxshift) \
-        sOKOK[6] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+384)*MOD)%_X])<<jj); \
-      if(SHIFT+448 < maxshift) \
-        sOKOK[7] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+448)*MOD)%_X])<<jj); \
+      sOKOK[0] |= (((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj); \
+      sOKOK[1] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+64)*MOD)%_X])<<jj); \
+      sOKOK[2] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+128)*MOD)%_X])<<jj); \
+      sOKOK[3] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+192)*MOD)%_X])<<jj); \
+      sOKOK[4] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+256)*MOD)%_X])<<jj); \
+      sOKOK[5] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+320)*MOD)%_X])<<jj); \
+      sOKOK[6] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+384)*MOD)%_X])<<jj); \
+      sOKOK[7] |= (((uint64_t)OK##_X[(j+(jj+SHIFT+448)*MOD)%_X])<<jj); \
     } \
     xxOKOK##_X[j] = _mm512_load_epi64( sOKOK ); \
   }
+  
+  
+#define MAKE_OKOKix(_X) \
+  for(j=0;j<_X;j++){ \
+    tOKOK[0]=0; \
+    tOKOK[1]=0; \
+    for(jj=0;jj<64;jj++){ \
+      tOKOK[0]|=(((uint64_t)OK##_X[(j+(jj+SHIFT+512)*MOD)%_X])<<jj); \
+      tOKOK[1]|=(((uint64_t)OK##_X[(j+(jj+SHIFT+576)*MOD)%_X])<<jj); \
+    } \
+    ixOKOK##_X[j] = _mm_load_si128( (__m128i*)tOKOK ); \
+  }
+  
+  
+void check_n(uint64_t n, uint64_t STEP, int K){
+
+	if(n%7)
+	if(n%11)
+	if(n%13)
+	if(n%17)
+	if(n%19)
+	if(n%23)
+	if(OK281[n%281])
+	if(OK283[n%283])
+	if(OK293[n%293])
+	if(OK307[n%307])
+	if(OK311[n%311])
+	if(OK313[n%313])
+	if(OK317[n%317])
+	if(OK331[n%331])
+	if(OK337[n%337])
+	if(OK347[n%347])
+	if(OK349[n%349])
+	if(OK353[n%353])
+	if(OK359[n%359])
+	if(OK367[n%367])
+	if(OK373[n%373])
+	if(OK379[n%379])
+	if(OK383[n%383])
+	if(OK389[n%389])
+	if(OK397[n%397])
+	if(OK401[n%401])
+	if(OK409[n%409])
+	if(OK419[n%419])
+	if(OK421[n%421])
+	if(OK431[n%431])
+	if(OK433[n%433])
+	if(OK439[n%439])
+	if(OK443[n%443])
+	if(OK449[n%449])
+	if(OK457[n%457])
+	if(OK461[n%461])
+	if(OK463[n%463])
+	if(OK467[n%467])
+	if(OK479[n%479])
+	if(OK487[n%487])
+	if(OK491[n%491])
+	if(OK499[n%499])
+	if(OK503[n%503])
+	if(OK509[n%509])
+	if(OK521[n%521])
+	if(OK523[n%523])
+	if(OK541[n%541]){
+		int k = 0;
+		uint64_t m = n + STEP * 5;
+					
+		while(PrimeQ(m)){
+			k++;
+			m += STEP;
+		}
+		
+		if(k>=10){
+			m = n + STEP * 4;
+			uint64_t mstart = m;
+			while(PrimeQ(m)){
+				k++;
+				m -= STEP;
+				if(m > mstart) break;	// m < 0
+			}
+		}
+
+		if(k>=10){
+			uint64_t first_term = m + STEP;
+
+			ckerr(pthread_mutex_lock(&lock2));
+			ReportSolution(k, K, first_term);
+			++totalaps;
+			ckerr(pthread_mutex_unlock(&lock2));
+		}
+	}
+	
+}
 
 
 void *thr_func_avx512(void *arg) {
@@ -191,6 +277,7 @@ void *thr_func_avx512(void *arg) {
 	time_t boinc_last, boinc_curr;
 	double cc, dd;
 	uint64_t sito[8] __attribute__ ((aligned (64)));
+	uint64_t sitosm[2] __attribute__ ((aligned (16)));
  	int16_t rems[16] __attribute__ ((aligned (32)));
 	const __m256i ZERO256 = _mm256_setzero_si256();
 	const __m512i ZERO512 = _mm512_setzero_si512();
@@ -198,8 +285,8 @@ void *thr_func_avx512(void *arg) {
 
 	if(data->id == 0){
 		time(&boinc_last);
-		cc = (double)( data->K_DONE*numn43s*2 + data->iteration*numn43s );
-		dd = 1.0 / (double)( data->K_COUNT*numn43s*2 );		
+		cc = (double)( data->K_DONE*numn43s );
+		dd = 1.0 / (double)( data->K_COUNT*numn43s );		
 	}
 
 	ckerr(pthread_mutex_lock(&lock1));
@@ -252,6 +339,7 @@ void *thr_func_avx512(void *arg) {
 								_mm256_store_si256( (__m256i*)rems, rvec);
 							}								
 
+							// check the first 8 SHIFTs
 							__m512i dsito = _mm512_and_epi64( xxOKOK61[rems[0]], xxOKOK67[rems[1]] );
 							dsito = _mm512_and_epi64( dsito, xxOKOK71[rems[2]] );
 							dsito = _mm512_and_epi64( dsito, xxOKOK73[rems[3]] );
@@ -301,85 +389,74 @@ void *thr_func_avx512(void *arg) {
 									while(sito[ii]){
 										int setbit = 63 - __builtin_clzll(sito[ii]);
 										uint64_t n = n59+( setbit + data->SHIFT + (64*ii) )*MOD;
-
-										if(n%7)
-										if(n%11)
-										if(n%13)
-										if(n%17)
-										if(n%19)
-										if(n%23)
-										if(OK281[n%281])
-										if(OK283[n%283])
-										if(OK293[n%293])
-										if(OK307[n%307])
-										if(OK311[n%311])
-										if(OK313[n%313])
-										if(OK317[n%317])
-										if(OK331[n%331])
-										if(OK337[n%337])
-										if(OK347[n%347])
-										if(OK349[n%349])
-										if(OK353[n%353])
-										if(OK359[n%359])
-										if(OK367[n%367])
-										if(OK373[n%373])
-										if(OK379[n%379])
-										if(OK383[n%383])
-										if(OK389[n%389])
-										if(OK397[n%397])
-										if(OK401[n%401])
-										if(OK409[n%409])
-										if(OK419[n%419])
-										if(OK421[n%421])
-										if(OK431[n%431])
-										if(OK433[n%433])
-										if(OK439[n%439])
-										if(OK443[n%443])
-										if(OK449[n%449])
-										if(OK457[n%457])
-										if(OK461[n%461])
-										if(OK463[n%463])
-										if(OK467[n%467])
-										if(OK479[n%479])
-										if(OK487[n%487])
-										if(OK491[n%491])
-										if(OK499[n%499])
-										if(OK503[n%503])
-										if(OK509[n%509])
-										if(OK521[n%521])
-										if(OK523[n%523])
-										if(OK541[n%541]){
-											int k = 0;
-											uint64_t m = n + data->STEP * 5;
-											while(PrimeQ(m)){
-												k++;
-												m += data->STEP;
-											}
-											
-											if(k>=10){
-												m = n + data->STEP * 4;
-												uint64_t mstart = m;
-												while(PrimeQ(m)){
-													k++;
-													m -= data->STEP;
-													if(m > mstart) break;
-												}
-											}
-
-											if(k>=10){
-												uint64_t first_term = m + data->STEP;
-
-												ckerr(pthread_mutex_lock(&lock2));
-												ReportSolution(k, data->K, first_term);
-												++totalaps;
-												ckerr(pthread_mutex_unlock(&lock2));
-											}
-										}
-																								
+										check_n(n, data->STEP, data->K);																											
 										sito[ii] ^= ((uint64_t)1) << setbit; // toggle bit off
 									}
 								}
 							}}}
+							
+							// check the last two SHIFTs
+							__m128i isito = _mm_and_si128( ixOKOK61[rems[0]], ixOKOK67[rems[1]] );
+							isito = _mm_and_si128( isito, ixOKOK71[rems[2]] );
+							isito = _mm_and_si128( isito, ixOKOK73[rems[3]] );
+							isito = _mm_and_si128( isito, ixOKOK79[rems[4]] );
+							isito = _mm_and_si128( isito, ixOKOK83[rems[5]] );
+							isito = _mm_and_si128( isito, ixOKOK89[rems[6]] );
+							isito = _mm_and_si128( isito, ixOKOK97[rems[7]] );
+							isito = _mm_and_si128( isito, ixOKOK101[rems[8]] );
+							isito = _mm_and_si128( isito, ixOKOK103[rems[9]] );
+							isito = _mm_and_si128( isito, ixOKOK107[rems[10]] );
+							isito = _mm_and_si128( isito, ixOKOK109[rems[11]] );
+							isito = _mm_and_si128( isito, ixOKOK113[rems[12]] );
+							isito = _mm_and_si128( isito, ixOKOK127[rems[13]] );
+							isito = _mm_and_si128( isito, ixOKOK131[rems[14]] );
+							isito = _mm_and_si128( isito, ixOKOK137[rems[15]] );
+							if( continue_sito_128(isito) ){
+								isito = _mm_and_si128( isito, ixOKOK139[REM(n59,139,8)] );
+								isito = _mm_and_si128( isito, ixOKOK149[REM(n59,149,8)] );
+								isito = _mm_and_si128( isito, ixOKOK151[REM(n59,151,8)] );
+								isito = _mm_and_si128( isito, ixOKOK157[REM(n59,157,8)] );
+								isito = _mm_and_si128( isito, ixOKOK163[REM(n59,163,8)] );
+								isito = _mm_and_si128( isito, ixOKOK167[REM(n59,167,8)] );
+								isito = _mm_and_si128( isito, ixOKOK173[REM(n59,173,8)] );
+								isito = _mm_and_si128( isito, ixOKOK179[REM(n59,179,8)] );
+								isito = _mm_and_si128( isito, ixOKOK181[REM(n59,181,8)] );
+								isito = _mm_and_si128( isito, ixOKOK191[REM(n59,191,8)] );
+								isito = _mm_and_si128( isito, ixOKOK193[REM(n59,193,8)] );
+								isito = _mm_and_si128( isito, ixOKOK197[REM(n59,197,8)] );
+								isito = _mm_and_si128( isito, ixOKOK199[REM(n59,199,8)] );
+							if( continue_sito_128(isito) ){
+								isito = _mm_and_si128( isito, ixOKOK211[REM(n59,211,8)] );
+								isito = _mm_and_si128( isito, ixOKOK223[REM(n59,223,8)] );
+								isito = _mm_and_si128( isito, ixOKOK227[REM(n59,227,8)] );
+								isito = _mm_and_si128( isito, ixOKOK229[REM(n59,229,8)] );
+								isito = _mm_and_si128( isito, ixOKOK233[REM(n59,233,8)] );
+								isito = _mm_and_si128( isito, ixOKOK239[REM(n59,239,8)] );
+								isito = _mm_and_si128( isito, ixOKOK241[REM(n59,241,8)] );
+								isito = _mm_and_si128( isito, ixOKOK251[REM(n59,251,8)] );
+								isito = _mm_and_si128( isito, ixOKOK257[REM(n59,257,9)] );
+								isito = _mm_and_si128( isito, ixOKOK263[REM(n59,263,9)] );
+								isito = _mm_and_si128( isito, ixOKOK269[REM(n59,269,9)] );
+								isito = _mm_and_si128( isito, ixOKOK271[REM(n59,271,9)] );
+								isito = _mm_and_si128( isito, ixOKOK277[REM(n59,277,9)] );
+							if( continue_sito_128(isito) ){
+								_mm_store_si128( (__m128i*)sitosm, isito );
+								
+								while(sitosm[0]){
+									int setbit = 63 - __builtin_clzll(sitosm[0]);
+									uint64_t n = n59+( setbit + data->SHIFT + 512 )*MOD;
+									check_n(n, data->STEP, data->K);																											
+									sitosm[0] ^= ((uint64_t)1) << setbit; // toggle bit off
+								}
+								while(sitosm[1]){
+									int setbit = 63 - __builtin_clzll(sitosm[1]);
+									uint64_t n = n59+( setbit + data->SHIFT + 576 )*MOD;
+									check_n(n, data->STEP, data->K);																											
+									sitosm[1] ^= ((uint64_t)1) << setbit; // toggle bit off
+								}								
+
+							}}}
+							
 
 							n59 += data->S59;
 
@@ -423,18 +500,17 @@ void *thr_func_avx512(void *arg) {
 }
 
 
-void Search_avx512(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
+void Search_avx512(int K, int SHIFT, int K_COUNT, int K_DONE, int threads)
 { 
 	int i3, i5, i31, i37, i41;
-	int SHIFT;
-	int maxshift = startSHIFT+640;
 	uint64_t STEP;
 	uint64_t n0;
 	uint64_t S31, S37, S41, S43, S47, S53, S59;
 	int j,jj,k;
 	int err;
 	uint64_t sOKOK[8] __attribute__ ((aligned (64)));
-
+	uint64_t tOKOK[2] __attribute__ ((aligned (16)));
+	
 	time_t start_time, finish_time;
 
 	if(boinc_standalone()){
@@ -563,94 +639,128 @@ void Search_avx512(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	MAKE_OK(523);
 	MAKE_OK(541);
 		
-	int iteration = 0;
+	MAKE_OKOK(61);
+	MAKE_OKOK(67);
+	MAKE_OKOK(71);
+	MAKE_OKOK(73);
+	MAKE_OKOK(79);
+	MAKE_OKOK(83);
+	MAKE_OKOK(89);
+	MAKE_OKOK(97);
+	MAKE_OKOK(101);
+	MAKE_OKOK(103);
+	MAKE_OKOK(107);
+	MAKE_OKOK(109);
+	MAKE_OKOK(113);
+	MAKE_OKOK(127);
+	MAKE_OKOK(131);
+	MAKE_OKOK(137);
+	MAKE_OKOK(139);
+	MAKE_OKOK(149);
+	MAKE_OKOK(151);
+	MAKE_OKOK(157);
+	MAKE_OKOK(163);
+	MAKE_OKOK(167);
+	MAKE_OKOK(173);
+	MAKE_OKOK(179);
+	MAKE_OKOK(181);
+	MAKE_OKOK(191);
+	MAKE_OKOK(193);
+	MAKE_OKOK(197);
+	MAKE_OKOK(199);
+	MAKE_OKOK(211);
+	MAKE_OKOK(223);
+	MAKE_OKOK(227);
+	MAKE_OKOK(229);
+	MAKE_OKOK(233);
+	MAKE_OKOK(239);
+	MAKE_OKOK(241);
+	MAKE_OKOK(251);
+	MAKE_OKOK(257);
+	MAKE_OKOK(263);
+	MAKE_OKOK(269);
+	MAKE_OKOK(271);
+	MAKE_OKOK(277);
+	
+	MAKE_OKOKix(61);
+	MAKE_OKOKix(67);
+	MAKE_OKOKix(71);
+	MAKE_OKOKix(73);
+	MAKE_OKOKix(79);
+	MAKE_OKOKix(83);
+	MAKE_OKOKix(89);
+	MAKE_OKOKix(97);
+	MAKE_OKOKix(101);
+	MAKE_OKOKix(103);
+	MAKE_OKOKix(107);
+	MAKE_OKOKix(109);
+	MAKE_OKOKix(113);
+	MAKE_OKOKix(127);
+	MAKE_OKOKix(131);
+	MAKE_OKOKix(137);
+	MAKE_OKOKix(139);
+	MAKE_OKOKix(149);
+	MAKE_OKOKix(151);
+	MAKE_OKOKix(157);
+	MAKE_OKOKix(163);
+	MAKE_OKOKix(167);
+	MAKE_OKOKix(173);
+	MAKE_OKOKix(179);
+	MAKE_OKOKix(181);
+	MAKE_OKOKix(191);
+	MAKE_OKOKix(193);
+	MAKE_OKOKix(197);
+	MAKE_OKOKix(199);
+	MAKE_OKOKix(211);
+	MAKE_OKOKix(223);
+	MAKE_OKOKix(227);
+	MAKE_OKOKix(229);
+	MAKE_OKOKix(233);
+	MAKE_OKOKix(239);
+	MAKE_OKOKix(241);
+	MAKE_OKOKix(251);
+	MAKE_OKOKix(257);
+	MAKE_OKOKix(263);
+	MAKE_OKOKix(269);
+	MAKE_OKOKix(271);
+	MAKE_OKOKix(277);		
 
-	// 10 shift
-	for(SHIFT=startSHIFT; SHIFT<maxshift; SHIFT+=512){
+	pthread_t thr[threads];
 
-		MAKE_OKOK(61);
-		MAKE_OKOK(67);
-		MAKE_OKOK(71);
-		MAKE_OKOK(73);
-		MAKE_OKOK(79);
-		MAKE_OKOK(83);
-		MAKE_OKOK(89);
-		MAKE_OKOK(97);
-		MAKE_OKOK(101);
-		MAKE_OKOK(103);
-		MAKE_OKOK(107);
-		MAKE_OKOK(109);
-		MAKE_OKOK(113);
-		MAKE_OKOK(127);
-		MAKE_OKOK(131);
-		MAKE_OKOK(137);
-		MAKE_OKOK(139);
-		MAKE_OKOK(149);
-		MAKE_OKOK(151);
-		MAKE_OKOK(157);
-		MAKE_OKOK(163);
-		MAKE_OKOK(167);
-		MAKE_OKOK(173);
-		MAKE_OKOK(179);
-		MAKE_OKOK(181);
-		MAKE_OKOK(191);
-		MAKE_OKOK(193);
-		MAKE_OKOK(197);
-		MAKE_OKOK(199);
-		MAKE_OKOK(211);
-		MAKE_OKOK(223);
-		MAKE_OKOK(227);
-		MAKE_OKOK(229);
-		MAKE_OKOK(233);
-		MAKE_OKOK(239);
-		MAKE_OKOK(241);
-		MAKE_OKOK(251);
-		MAKE_OKOK(257);
-		MAKE_OKOK(263);
-		MAKE_OKOK(269);
-		MAKE_OKOK(271);
-		MAKE_OKOK(277);
+	// create a thread_data_t argument array
+	thread_data_t thr_data[threads];
 
-		pthread_t thr[threads];
+	// initialize shared data
+	current_n43 = 0;
 
-		// create a thread_data_t argument array
-		thread_data_t thr_data[threads];
-
-		// initialize shared data
-		current_n43 = 0;
-
-		// create threads
-		for (k = 0; k < threads; ++k) {
-			thr_data[k].id = k;
-			thr_data[k].K = K;
-			thr_data[k].K_COUNT = K_COUNT;
-			thr_data[k].K_DONE = K_DONE;
-			thr_data[k].SHIFT = SHIFT;
-			thr_data[k].STEP = STEP;
-			thr_data[k].S43 = S43;
-			thr_data[k].S47 = S47;
-			thr_data[k].S53 = S53;
-			thr_data[k].S59 = S59;
-			thr_data[k].iteration = iteration;
-			err = pthread_create(&thr[k], NULL, thr_func_avx512, &thr_data[k]);
-			if (err){
-				fprintf(stderr, "ERROR: pthread_create, code: %d\n", err);
-				exit(EXIT_FAILURE);
-			}
+	// create threads
+	for (k = 0; k < threads; ++k) {
+		thr_data[k].id = k;
+		thr_data[k].K = K;
+		thr_data[k].K_COUNT = K_COUNT;
+		thr_data[k].K_DONE = K_DONE;
+		thr_data[k].SHIFT = SHIFT;
+		thr_data[k].STEP = STEP;
+		thr_data[k].S43 = S43;
+		thr_data[k].S47 = S47;
+		thr_data[k].S53 = S53;
+		thr_data[k].S59 = S59;
+		err = pthread_create(&thr[k], NULL, thr_func_avx512, &thr_data[k]);
+		if (err){
+			fprintf(stderr, "ERROR: pthread_create, code: %d\n", err);
+			exit(EXIT_FAILURE);
 		}
-
-		// block until all threads complete
-		for (k = 0; k < threads; ++k) {
-			err = pthread_join(thr[k], NULL);
-			if (err){
-				fprintf(stderr, "ERROR: pthread_join, code: %d\n", err);
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		++iteration;
-		
 	}
+
+	// block until all threads complete
+	for (k = 0; k < threads; ++k) {
+		err = pthread_join(thr[k], NULL);
+		if (err){
+			fprintf(stderr, "ERROR: pthread_join, code: %d\n", err);
+			exit(EXIT_FAILURE);
+		}
+	}
+
 
 	if(boinc_standalone()){
 		time(&finish_time);

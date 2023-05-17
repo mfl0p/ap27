@@ -44,12 +44,12 @@ int current_n43;
 pthread_mutex_t lock1;
 /////////////////////////////
 
-
 ///////////////////////////////////
 // lock used for reporting results
 uint32_t totalaps;
 pthread_mutex_t lock2;
 ///////////////////////////////////
+
 
 
 void handle_trickle_up(){
@@ -621,10 +621,10 @@ int main(int argc, char *argv[])
 	boinc_init_options(&options);
 		
 	n43_h = (uint64_t*)malloc(numn43s * sizeof(uint64_t));		
-
+	
 	ckerr(pthread_mutex_init(&lock1, NULL));
 	ckerr(pthread_mutex_init(&lock2, NULL));
-
+	
 	fprintf(stderr, "AP26 CPU 10-shift search version %s by Bryan Little\n",VERS);
 	fprintf(stderr, "Compiled " __DATE__ " with GCC " __VERSION__ "\n");
 
@@ -896,7 +896,6 @@ int main(int argc, char *argv[])
 	}
 
 
-
 	boinc_begin_critical_section();
 	boinc_fraction_done(1.0);
 	checkpoint(SHIFT,K,1);
@@ -905,6 +904,9 @@ int main(int argc, char *argv[])
 	boinc_end_critical_section();
 
 	free(n43_h);
+	
+	ckerr(pthread_mutex_destroy(&lock1));
+	ckerr(pthread_mutex_destroy(&lock2));
 
 	boinc_finish(EXIT_SUCCESS);
 	return EXIT_SUCCESS;
