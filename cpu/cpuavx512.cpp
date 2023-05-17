@@ -9,7 +9,7 @@
 
 #include "cpuconst.h"
 
-__m256i svec, mvec, numvec1, numvec2, zerovec; // avx2, avx512
+__m256i svec, mvec, numvec1, numvec2; // avx2, avx512
 
 // char arrays total 23693 bytes
 char OK61[61];
@@ -151,7 +151,7 @@ __m512i xxOKOK277[277];
     OK##_X[(j*(STEP%_X))%_X]=0;
 
 
-#define MAKE_OKOKxx(_X) \
+#define MAKE_OKOK(_X) \
   for(j=0;j<_X;j++){ \
     sOKOK[0]=0; \
     sOKOK[1]=0; \
@@ -191,6 +191,7 @@ void *thr_func_avx512(void *arg) {
 	time_t boinc_last, boinc_curr;
 	double cc, dd;
 	uint64_t sito[8] __attribute__ ((aligned (64)));
+ 	int16_t rems[16] __attribute__ ((aligned (32)));
 	const __m256i ZERO256 = _mm256_setzero_si256();
 	const __m512i ZERO512 = _mm512_setzero_si512();
 	__mmask16 m;
@@ -227,26 +228,45 @@ void *thr_func_avx512(void *arg) {
 					n53=n47;
 					for(i53=(PRIME7-24);i53>0;i53--){
 						n59=n53;
-						__m256i rvec = _mm256_set_epi16(REM(n59,61,6), REM(n59,67,7), REM(n59,71,7), REM(n59,73,7), REM(n59,79,7), REM(n59,83,7), REM(n59,89,7), REM(n59,97,7),
-								REM(n59,101,7), REM(n59,103,7), REM(n59,107,7), REM(n59,109,7), REM(n59,113,7), REM(n59,127,7), REM(n59,131,8), REM(n59,137,8));
+						rems[0] = REM(n59,61,6);
+						rems[1] = REM(n59,67,7);
+						rems[2] = REM(n59,71,7);
+						rems[3] = REM(n59,73,7);
+						rems[4] = REM(n59,79,7);
+						rems[5] = REM(n59,83,7);
+						rems[6] = REM(n59,89,7);
+						rems[7] = REM(n59,97,7);
+						rems[8] = REM(n59,101,7);
+						rems[9] = REM(n59,103,7);
+						rems[10] = REM(n59,107,7);
+						rems[11] = REM(n59,109,7);
+						rems[12] = REM(n59,113,7);
+						rems[13] = REM(n59,127,7);
+						rems[14] = REM(n59,131,8);
+						rems[15] = REM(n59,137,8);
+						__m256i rvec = _mm256_load_si256( (__m256i*)rems);
 
 						for(i59=(PRIME8-24);i59>0;i59--){
+							
+							if(i59 < 35){
+								_mm256_store_si256( (__m256i*)rems, rvec);
+							}								
 
-							__m512i dsito = _mm512_and_epi64( xxOKOK61[_mm256_extract_epi16(rvec, 15)], xxOKOK67[_mm256_extract_epi16(rvec, 14)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK71[_mm256_extract_epi16(rvec, 13)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK73[_mm256_extract_epi16(rvec, 12)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK79[_mm256_extract_epi16(rvec, 11)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK83[_mm256_extract_epi16(rvec, 10)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK89[_mm256_extract_epi16(rvec, 9)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK97[_mm256_extract_epi16(rvec, 8)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK101[_mm256_extract_epi16(rvec, 7)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK103[_mm256_extract_epi16(rvec, 6)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK107[_mm256_extract_epi16(rvec, 5)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK109[_mm256_extract_epi16(rvec, 4)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK113[_mm256_extract_epi16(rvec, 3)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK127[_mm256_extract_epi16(rvec, 2)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK131[_mm256_extract_epi16(rvec, 1)] );
-							dsito = _mm512_and_epi64( dsito, xxOKOK137[_mm256_extract_epi16(rvec, 0)] );
+							__m512i dsito = _mm512_and_epi64( xxOKOK61[rems[0]], xxOKOK67[rems[1]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK71[rems[2]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK73[rems[3]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK79[rems[4]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK83[rems[5]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK89[rems[6]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK97[rems[7]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK101[rems[8]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK103[rems[9]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK107[rems[10]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK109[rems[11]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK113[rems[12]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK127[rems[13]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK131[rems[14]] );
+							dsito = _mm512_and_epi64( dsito, xxOKOK137[rems[15]] );
 							if( continue_sito(dsito) ){
 								dsito = _mm512_and_epi64( dsito, xxOKOK139[REM(n59,139,8)] );
 								dsito = _mm512_and_epi64( dsito, xxOKOK149[REM(n59,149,8)] );
@@ -446,13 +466,17 @@ void Search_avx512(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	}
 
 	//quick loop vectors
-	svec = _mm256_set_epi16(S59%61, S59%67, S59%71, S59%73, S59%79, S59%83, S59%89, S59%97,
-				S59%101, S59%103, S59%107, S59%109, S59%113, S59%127, S59%131, S59%137);
+ 	int16_t sarr[16] __attribute__ ((aligned (32))) = { (int16_t)(S59%61), (int16_t)(S59%67), (int16_t)(S59%71), (int16_t)(S59%73), (int16_t)(S59%79), (int16_t)(S59%83), (int16_t)(S59%89), (int16_t)(S59%97),
+														(int16_t)(S59%101), (int16_t)(S59%103), (int16_t)(S59%107), (int16_t)(S59%109), (int16_t)(S59%113), (int16_t)(S59%127), (int16_t)(S59%131), (int16_t)(S59%137) };
+	svec = _mm256_load_si256( (__m256i*)sarr );	
 
-	mvec = _mm256_set_epi16(MOD%61, MOD%67, MOD%71, MOD%73, MOD%79, MOD%83, MOD%89, MOD%97,
-				MOD%101, MOD%103, MOD%107, MOD%109, MOD%113, MOD%127, MOD%131, MOD%137);
-
-	numvec1	= _mm256_set_epi16(61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137);
+	int16_t marr[16] __attribute__ ((aligned (32))) = { (int16_t)(MOD%61), (int16_t)(MOD%67), (int16_t)(MOD%71), (int16_t)(MOD%73), (int16_t)(MOD%79), (int16_t)(MOD%83), (int16_t)(MOD%89), (int16_t)(MOD%97),
+														(int16_t)(MOD%101), (int16_t)(MOD%103), (int16_t)(MOD%107), (int16_t)(MOD%109), (int16_t)(MOD%113), (int16_t)(MOD%127), (int16_t)(MOD%131), (int16_t)(MOD%137) };
+	mvec = _mm256_load_si256( (__m256i*)marr );															
+	
+	int16_t narr[16] __attribute__ ((aligned (32))) = { 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137 };
+	
+	numvec1 = _mm256_load_si256( (__m256i*)narr );
 
 	// init OK arrays    
 	MAKE_OK(61);
@@ -544,48 +568,48 @@ void Search_avx512(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	// 10 shift
 	for(SHIFT=startSHIFT; SHIFT<maxshift; SHIFT+=512){
 
-		MAKE_OKOKxx(61);
-		MAKE_OKOKxx(67);
-		MAKE_OKOKxx(71);
-		MAKE_OKOKxx(73);
-		MAKE_OKOKxx(79);
-		MAKE_OKOKxx(83);
-		MAKE_OKOKxx(89);
-		MAKE_OKOKxx(97);
-		MAKE_OKOKxx(101);
-		MAKE_OKOKxx(103);
-		MAKE_OKOKxx(107);
-		MAKE_OKOKxx(109);
-		MAKE_OKOKxx(113);
-		MAKE_OKOKxx(127);
-		MAKE_OKOKxx(131);
-		MAKE_OKOKxx(137);
-		MAKE_OKOKxx(139);
-		MAKE_OKOKxx(149);
-		MAKE_OKOKxx(151);
-		MAKE_OKOKxx(157);
-		MAKE_OKOKxx(163);
-		MAKE_OKOKxx(167);
-		MAKE_OKOKxx(173);
-		MAKE_OKOKxx(179);
-		MAKE_OKOKxx(181);
-		MAKE_OKOKxx(191);
-		MAKE_OKOKxx(193);
-		MAKE_OKOKxx(197);
-		MAKE_OKOKxx(199);
-		MAKE_OKOKxx(211);
-		MAKE_OKOKxx(223);
-		MAKE_OKOKxx(227);
-		MAKE_OKOKxx(229);
-		MAKE_OKOKxx(233);
-		MAKE_OKOKxx(239);
-		MAKE_OKOKxx(241);
-		MAKE_OKOKxx(251);
-		MAKE_OKOKxx(257);
-		MAKE_OKOKxx(263);
-		MAKE_OKOKxx(269);
-		MAKE_OKOKxx(271);
-		MAKE_OKOKxx(277);
+		MAKE_OKOK(61);
+		MAKE_OKOK(67);
+		MAKE_OKOK(71);
+		MAKE_OKOK(73);
+		MAKE_OKOK(79);
+		MAKE_OKOK(83);
+		MAKE_OKOK(89);
+		MAKE_OKOK(97);
+		MAKE_OKOK(101);
+		MAKE_OKOK(103);
+		MAKE_OKOK(107);
+		MAKE_OKOK(109);
+		MAKE_OKOK(113);
+		MAKE_OKOK(127);
+		MAKE_OKOK(131);
+		MAKE_OKOK(137);
+		MAKE_OKOK(139);
+		MAKE_OKOK(149);
+		MAKE_OKOK(151);
+		MAKE_OKOK(157);
+		MAKE_OKOK(163);
+		MAKE_OKOK(167);
+		MAKE_OKOK(173);
+		MAKE_OKOK(179);
+		MAKE_OKOK(181);
+		MAKE_OKOK(191);
+		MAKE_OKOK(193);
+		MAKE_OKOK(197);
+		MAKE_OKOK(199);
+		MAKE_OKOK(211);
+		MAKE_OKOK(223);
+		MAKE_OKOK(227);
+		MAKE_OKOK(229);
+		MAKE_OKOK(233);
+		MAKE_OKOK(239);
+		MAKE_OKOK(241);
+		MAKE_OKOK(251);
+		MAKE_OKOK(257);
+		MAKE_OKOK(263);
+		MAKE_OKOK(269);
+		MAKE_OKOK(271);
+		MAKE_OKOK(277);
 
 		pthread_t thr[threads];
 

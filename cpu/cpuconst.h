@@ -2,8 +2,8 @@
 
 extern uint64_t *n43_h;
 
-extern __m128i svec1, svec2, mvec1, mvec2, numvec1_1, numvec2_1, numvec1_2, numvec2_2, zerovec_avx;
-extern __m256i svec, mvec, numvec1, numvec2, zerovec;
+extern __m128i svec1, svec2, mvec1, mvec2, numvec1_1, numvec2_1, numvec1_2, numvec2_2;
+extern __m256i svec, mvec, numvec1, numvec2;
 
 
 extern char OK61[61];

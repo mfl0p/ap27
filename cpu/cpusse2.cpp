@@ -72,32 +72,40 @@ uint64_t OKOK277[277];
 
 
 void *thr_func_sse2(void *arg) {
-
 	thread_data_t *data = (thread_data_t *)arg;
-	int err;
 	int i43, i47, i53, i59;
-	uint64_t n, n43, n47, n53, n59;
+	uint64_t n, n43, n47, n53, n59, sito;
+	time_t boinc_last, boinc_curr;
+	double cc, dd;
+ 	int16_t rems[8] __attribute__ ((aligned (16)));
+	int16_t rrems[8] __attribute__ ((aligned (16)));
+	const __m128i ZERO128 = _mm_setzero_si128();
 
-	err = pthread_mutex_lock(&lock1);
-	if (err){
-		fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
-		exit(EXIT_FAILURE);
+	if(data->id == 0){
+		time(&boinc_last);
+		cc = (double)( data->K_DONE*numn43s*10 + data->iteration*numn43s );
+		dd = 1.0 / (double)( data->K_COUNT*numn43s*10 );		
 	}
-	uint64_t start = current_n43;
-	uint64_t stop = start + thread_range;
-	if(stop > numn43s){
-		stop = numn43s;
-	}
+
+	ckerr(pthread_mutex_lock(&lock1));
+	int start = current_n43;
+	int stop = start + thread_range;
+	if(stop > numn43s) stop = numn43s;
 	current_n43 = stop;
-	err = pthread_mutex_unlock(&lock1);
-	if (err){
-		fprintf(stderr, "ERROR: pthread_mutex_unlock, code: %d\n", err);
-		exit(EXIT_FAILURE);
-	}
+	ckerr(pthread_mutex_unlock(&lock1));
 
 	while(start < numn43s){
-//		printf("thread: %d, start: %" PRId64 ", stop: %" PRId64 "\n",data->id, start, stop);
 		for(;start<stop;++start){
+			
+			if(data->id == 0){
+				time (&boinc_curr);
+				if( ((int)boinc_curr - (int)boinc_last) > 5 ){
+					double prog = (cc + (double)start ) * dd;
+					Progress(prog);
+					boinc_last = boinc_curr;
+				}
+			}
+			
 			n43=n43_h[start];
 			for(i43=(PRIME5-24);i43>0;i43--){
 				n47=n43;
@@ -105,150 +113,155 @@ void *thr_func_sse2(void *arg) {
 					n53=n47;
 					for(i53=(PRIME7-24);i53>0;i53--){
 						n59=n53;
-						__m128i r_numvec1 = _mm_set_epi16(REM(n59,61,6), REM(n59,67,7), REM(n59,71,7), REM(n59,73,7),
-									 REM(n59,79,7), REM(n59,83,7), REM(n59,89,7), REM(n59,97,7));
-						__m128i r_numvec2 = _mm_set_epi16(REM(n59,101,7), REM(n59,103,7), REM(n59,107,7), REM(n59,109,7),
-									 REM(n59,113,7), REM(n59,127,7), REM(n59,131,8), REM(n59,137,8));
+						rems[0] = REM(n59,61,6);
+						rems[1] = REM(n59,67,7);
+						rems[2] = REM(n59,71,7);
+						rems[3] = REM(n59,73,7);
+						rems[4] = REM(n59,79,7);
+						rems[5] = REM(n59,83,7);
+						rems[6] = REM(n59,89,7);
+						rems[7] = REM(n59,97,7);
+						rrems[0] = REM(n59,101,7);
+						rrems[1] = REM(n59,103,7);
+						rrems[2] = REM(n59,107,7);
+						rrems[3] = REM(n59,109,7);
+						rrems[4] = REM(n59,113,7);
+						rrems[5] = REM(n59,127,7);
+						rrems[6] = REM(n59,131,8);
+						rrems[7] = REM(n59,137,8);
+						__m128i r_numvec1 = _mm_load_si128( (__m128i*)rems);
+						__m128i r_numvec2 = _mm_load_si128( (__m128i*)rrems);
 
 						for(i59=(PRIME8-24);i59>0;i59--){
-							uint64_t sito;
-							if(sito = OKOK61[_mm_extract_epi16(r_numvec1, 7)]
-									& OKOK67[_mm_extract_epi16(r_numvec1, 6)]
-									& OKOK71[_mm_extract_epi16(r_numvec1, 5)]
-									& OKOK73[_mm_extract_epi16(r_numvec1, 4)]
-									& OKOK79[_mm_extract_epi16(r_numvec1, 3)]
-									& OKOK83[_mm_extract_epi16(r_numvec1, 2)]
-									& OKOK89[_mm_extract_epi16(r_numvec1, 1)]
-									& OKOK97[_mm_extract_epi16(r_numvec1, 0)])
-							if(sito&=(OKOK101[_mm_extract_epi16(r_numvec2, 7)]
-									& OKOK103[_mm_extract_epi16(r_numvec2, 6)]
-									& OKOK107[_mm_extract_epi16(r_numvec2, 5)]
-									& OKOK109[_mm_extract_epi16(r_numvec2, 4)]
-									& OKOK113[_mm_extract_epi16(r_numvec2, 3)]
-									& OKOK127[_mm_extract_epi16(r_numvec2, 2)]
-									& OKOK131[_mm_extract_epi16(r_numvec2, 1)]
-									& OKOK137[_mm_extract_epi16(r_numvec2, 0)]))
+							
+							if(i59 < 35){
+								_mm_store_si128( (__m128i*)rems, r_numvec1);
+								_mm_store_si128( (__m128i*)rrems, r_numvec2);
+							}	
+							
+							if(sito = OKOK61[rems[0]]
+							& OKOK67[rems[1]]
+							& OKOK71[rems[2]]
+							& OKOK73[rems[3]]
+							& OKOK79[rems[4]]
+							& OKOK83[rems[5]]
+							& OKOK89[rems[6]]
+							& OKOK97[rems[7]])
+							if(sito&=(OKOK101[rrems[0]]
+							& OKOK103[rrems[1]]
+							& OKOK107[rrems[2]]
+							& OKOK109[rrems[3]]
+							& OKOK113[rrems[4]]
+							& OKOK127[rrems[5]]
+							& OKOK131[rrems[6]]
+							& OKOK137[rrems[7]]))
 							if(sito&=(OKOK139[REM(n59,139,8)]
-									& OKOK149[REM(n59,149,8)]
-									& OKOK151[REM(n59,151,8)]
-									& OKOK157[REM(n59,157,8)]
-									& OKOK163[REM(n59,163,8)]
-									& OKOK167[REM(n59,167,8)]
-									& OKOK173[REM(n59,173,8)]
-									& OKOK179[REM(n59,179,8)]
-									& OKOK181[REM(n59,181,8)]
-									& OKOK191[REM(n59,191,8)]
-									& OKOK193[REM(n59,193,8)]))
-							if(sito&=(OKOK197[REM(n59,197,8)]
-									& OKOK199[REM(n59,199,8)]
-									& OKOK211[REM(n59,211,8)]
-									& OKOK223[REM(n59,223,8)]
-									& OKOK227[REM(n59,227,8)]
-									& OKOK229[REM(n59,229,8)]
-									& OKOK233[REM(n59,233,8)]
-									& OKOK239[REM(n59,239,8)]
-									& OKOK241[REM(n59,241,8)]
-									& OKOK251[REM(n59,251,8)]
-									& OKOK257[REM(n59,257,9)]
-									& OKOK263[REM(n59,263,9)]
-									& OKOK269[REM(n59,269,9)]
-									& OKOK271[REM(n59,271,9)]
-									& OKOK277[REM(n59,277,9)])){
+							& OKOK149[REM(n59,149,8)]
+							& OKOK151[REM(n59,151,8)]
+							& OKOK157[REM(n59,157,8)]
+							& OKOK163[REM(n59,163,8)]
+							& OKOK167[REM(n59,167,8)]
+							& OKOK173[REM(n59,173,8)]
+							& OKOK179[REM(n59,179,8)]
+							& OKOK181[REM(n59,181,8)]
+							& OKOK191[REM(n59,191,8)]
+							& OKOK193[REM(n59,193,8)]))
+							{
+								sito&=(OKOK197[REM(n59,197,8)]
+								& OKOK199[REM(n59,199,8)]
+								& OKOK211[REM(n59,211,8)]
+								& OKOK223[REM(n59,223,8)]
+								& OKOK227[REM(n59,227,8)]
+								& OKOK229[REM(n59,229,8)]
+								& OKOK233[REM(n59,233,8)]
+								& OKOK239[REM(n59,239,8)]
+								& OKOK241[REM(n59,241,8)]
+								& OKOK251[REM(n59,251,8)]
+								& OKOK257[REM(n59,257,9)]
+								& OKOK263[REM(n59,263,9)]
+								& OKOK269[REM(n59,269,9)]
+								& OKOK271[REM(n59,271,9)]
+								& OKOK277[REM(n59,277,9)]);
+								
+								while(sito){
+									int setbit = 63 - __builtin_clzll(sito);
+									uint64_t n = n59+( setbit + data->SHIFT )*MOD;
 
-								int b;
-								uint64_t n;
-								int bLimit, bStart;
-
-								bLimit = 63 - __builtin_clzll(sito);
-								bStart = __builtin_ctzll(sito);
-
-								for (b = bStart; b <= bLimit; b++){
-									if ((sito >> b) & 1)
-									{
-										n=n59+( b + data->SHIFT )*MOD;
-
-										if(n%7)
-										if(n%11)
-										if(n%13)
-										if(n%17)
-										if(n%19)
-										if(n%23)
-										if(OK281[n%281])
-										if(OK283[n%283])
-										if(OK293[n%293])
-										if(OK307[n%307])
-										if(OK311[n%311])
-										if(OK313[n%313])
-										if(OK317[n%317])
-										if(OK331[n%331])
-										if(OK337[n%337])
-										if(OK347[n%347])
-										if(OK349[n%349])
-										if(OK353[n%353])
-										if(OK359[n%359])
-										if(OK367[n%367])
-										if(OK373[n%373])
-										if(OK379[n%379])
-										if(OK383[n%383])
-										if(OK389[n%389])
-										if(OK397[n%397])
-										if(OK401[n%401])
-										if(OK409[n%409])
-										if(OK419[n%419])
-										if(OK421[n%421])
-										if(OK431[n%431])
-										if(OK433[n%433])
-										if(OK439[n%439])
-										if(OK443[n%443])
-										if(OK449[n%449])
-										if(OK457[n%457])
-										if(OK461[n%461])
-										if(OK463[n%463])
-										if(OK467[n%467])
-										if(OK479[n%479])
-										if(OK487[n%487])
-										if(OK491[n%491])
-										if(OK499[n%499])
-										if(OK503[n%503])
-										if(OK509[n%509])
-										if(OK521[n%521])
-										if(OK523[n%523])
-										if(OK541[n%541]){
-											uint64_t m;
-											int k;
-											k=0; 
-											m = n + data->STEP * 5;
+									if(n%7)
+									if(n%11)
+									if(n%13)
+									if(n%17)
+									if(n%19)
+									if(n%23)
+									if(OK281[n%281])
+									if(OK283[n%283])
+									if(OK293[n%293])
+									if(OK307[n%307])
+									if(OK311[n%311])
+									if(OK313[n%313])
+									if(OK317[n%317])
+									if(OK331[n%331])
+									if(OK337[n%337])
+									if(OK347[n%347])
+									if(OK349[n%349])
+									if(OK353[n%353])
+									if(OK359[n%359])
+									if(OK367[n%367])
+									if(OK373[n%373])
+									if(OK379[n%379])
+									if(OK383[n%383])
+									if(OK389[n%389])
+									if(OK397[n%397])
+									if(OK401[n%401])
+									if(OK409[n%409])
+									if(OK419[n%419])
+									if(OK421[n%421])
+									if(OK431[n%431])
+									if(OK433[n%433])
+									if(OK439[n%439])
+									if(OK443[n%443])
+									if(OK449[n%449])
+									if(OK457[n%457])
+									if(OK461[n%461])
+									if(OK463[n%463])
+									if(OK467[n%467])
+									if(OK479[n%479])
+									if(OK487[n%487])
+									if(OK491[n%491])
+									if(OK499[n%499])
+									if(OK503[n%503])
+									if(OK509[n%509])
+									if(OK521[n%521])
+									if(OK523[n%523])
+									if(OK541[n%541]){
+										int k = 0;
+										uint64_t m = n + data->STEP * 5;
+										while(PrimeQ(m)){
+											k++;
+											m += data->STEP;
+										}
+										
+										if(k>=10){
+											m = n + data->STEP * 4;
+											uint64_t mstart = m;
 											while(PrimeQ(m)){
 												k++;
-												m += data->STEP;
-											}
-
-											if(k>=10){
-												m = n + data->STEP * 4;
-												while(m>0&&PrimeQ(m)){
-													k++;
-													m -= data->STEP;
-												}
-											}
-
-											if(k>=10){
-												uint64_t first_term = m + data->STEP;
-
-												err = pthread_mutex_lock(&lock2);
-												if (err){
-													fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
-													exit(EXIT_FAILURE);
-												}
-												ReportSolution(k, data->K, first_term);
-												err = pthread_mutex_unlock(&lock2);
-												if (err){
-													fprintf(stderr, "ERROR: pthread_mutex_unlock, code: %d\n", err);
-													exit(EXIT_FAILURE);
-												}
-
+												m -= data->STEP;
+												if(m > mstart) break;
 											}
 										}
+
+										if(k>=10){
+											uint64_t first_term = m + data->STEP;
+
+											ckerr(pthread_mutex_lock(&lock2));
+											ReportSolution(k, data->K, first_term);
+											++totalaps;
+											ckerr(pthread_mutex_unlock(&lock2));
+										}
 									}
+																							
+									sito ^= ((uint64_t)1) << setbit; // toggle bit off
 								}
 							}
 
@@ -262,11 +275,11 @@ void *thr_func_sse2(void *arg) {
 
 								r_numvec1 = _mm_sub_epi16(r_numvec1, mvec1);
 								__m128i addvec = _mm_add_epi16(r_numvec1, numvec1_1);
-								r_numvec1 = vec_sel( r_numvec1, addvec, _mm_cmpgt_epi16( zerovec_avx, r_numvec1 ) );
+								r_numvec1 = vec_sel( r_numvec1, addvec, _mm_cmpgt_epi16( ZERO128, r_numvec1 ) );
 
 								r_numvec2 = _mm_sub_epi16(r_numvec2, mvec2);
 								addvec = _mm_add_epi16(r_numvec2, numvec1_2);
-								r_numvec2 = vec_sel(r_numvec2, addvec, _mm_cmpgt_epi16( zerovec_avx, r_numvec2 ) );
+								r_numvec2 = vec_sel(r_numvec2, addvec, _mm_cmpgt_epi16( ZERO128, r_numvec2 ) );
 							}
 							__m128i subvec = _mm_sub_epi16(r_numvec1, numvec1_1);
 							r_numvec1 = vec_sel(r_numvec1, subvec, _mm_cmpgt_epi16(r_numvec1, numvec2_1) );
@@ -286,19 +299,12 @@ void *thr_func_sse2(void *arg) {
 			}
 		}
 
-
-		err = pthread_mutex_lock(&lock1);
-		if (err){
-			fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
-			exit(EXIT_FAILURE);
-		}
+		ckerr(pthread_mutex_lock(&lock1));
 		start = current_n43;
 		stop = start + thread_range;
-		if(stop > numn43s){
-			stop = numn43s;
-		}
+		if(stop > numn43s) stop = numn43s;
 		current_n43 = stop;
-		err = pthread_mutex_unlock(&lock1);
+		ckerr(pthread_mutex_unlock(&lock1));
 	}
 
 	pthread_exit(NULL);
@@ -315,12 +321,10 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	uint64_t STEP;
 	uint64_t n0;
 	uint64_t S31, S37, S41, S43, S47, S53, S59;
-	double d = (double)1.0 / (K_COUNT*numn43s*10);
-	double dd;
 	int j,jj,k;
 	int err;
 
-	time_t start_time, finish_time, boinc_last, boinc_curr;
+	time_t start_time, finish_time;
 
 	if(boinc_standalone()){
 		time (&start_time);
@@ -351,19 +355,29 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	}
 
 	//quick loop vectors
-	svec1		= _mm_set_epi16(S59%61, S59%67, S59%71, S59%73, S59%79, S59%83, S59%89, S59%97);
-	svec2		= _mm_set_epi16(S59%101, S59%103, S59%107, S59%109, S59%113, S59%127, S59%131, S59%137);
+ 	int16_t s1arr[8] __attribute__ ((aligned (16))) = { (int16_t)(S59%61), (int16_t)(S59%67), (int16_t)(S59%71), (int16_t)(S59%73), (int16_t)(S59%79), (int16_t)(S59%83), (int16_t)(S59%89), (int16_t)(S59%97) };
+	svec1 = _mm_load_si128( (__m128i*)s1arr);
 
-	mvec1		= _mm_set_epi16(MOD%61, MOD%67, MOD%71, MOD%73, MOD%79, MOD%83, MOD%89, MOD%97);
-	mvec2		= _mm_set_epi16(MOD%101, MOD%103, MOD%107, MOD%109, MOD%113, MOD%127, MOD%131, MOD%137);
+	int16_t s2arr[8] __attribute__ ((aligned (16))) = { (int16_t)(S59%101), (int16_t)(S59%103), (int16_t)(S59%107), (int16_t)(S59%109), (int16_t)(S59%113), (int16_t)(S59%127), (int16_t)(S59%131), (int16_t)(S59%137) };
+	svec2 = _mm_load_si128( (__m128i*)s2arr);
 
-	numvec1_1	= _mm_set_epi16(61, 67, 71, 73, 79, 83, 89, 97);
-	numvec2_1	= _mm_set_epi16(60, 66, 70, 72, 78, 82, 88, 96);
+	int16_t m1arr[8] __attribute__ ((aligned (16))) = { (int16_t)(MOD%61), (int16_t)(MOD%67), (int16_t)(MOD%71), (int16_t)(MOD%73), (int16_t)(MOD%79), (int16_t)(MOD%83), (int16_t)(MOD%89), (int16_t)(MOD%97) };
+	mvec1 = _mm_load_si128( (__m128i*)m1arr);
 
-	numvec1_2	= _mm_set_epi16(101, 103, 107, 109, 113, 127, 131, 137);
-	numvec2_2	= _mm_set_epi16(100, 102, 106, 108, 112, 126, 130, 136);
+	int16_t m2arr[8] __attribute__ ((aligned (16))) = { (int16_t)(MOD%101), (int16_t)(MOD%103), (int16_t)(MOD%107), (int16_t)(MOD%109), (int16_t)(MOD%113), (int16_t)(MOD%127), (int16_t)(MOD%131), (int16_t)(MOD%137) };
+	mvec2 = _mm_load_si128( (__m128i*)m2arr);
 
-	zerovec_avx	= _mm_set_epi16(0, 0, 0, 0, 0, 0, 0, 0);
+	int16_t nv11arr[8] __attribute__ ((aligned (16))) = { 61, 67, 71, 73, 79, 83, 89, 97 };
+	numvec1_1 = _mm_load_si128( (__m128i*)nv11arr);
+
+	int16_t nv21arr[8] __attribute__ ((aligned (16))) = { 60, 66, 70, 72, 78, 82, 88, 96 };
+	numvec2_1 = _mm_load_si128( (__m128i*)nv21arr);
+	
+	int16_t nv12arr[8] __attribute__ ((aligned (16))) = { 101, 103, 107, 109, 113, 127, 131, 137 };
+	numvec1_2 = _mm_load_si128( (__m128i*)nv12arr);
+
+	int16_t nv22arr[8] __attribute__ ((aligned (16))) = { 100, 102, 106, 108, 112, 126, 130, 136 };
+	numvec2_2 = _mm_load_si128( (__m128i*)nv22arr);
 
 	// init OK arrays    
 	MAKE_OK(61);
@@ -498,8 +512,6 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 		MAKE_OKOK(271);
 		MAKE_OKOK(277);
 
-		time(&boinc_last);
-
 		pthread_t thr[threads];
 
 		// create a thread_data_t argument array
@@ -512,53 +524,18 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 		for (k = 0; k < threads; ++k) {
 			thr_data[k].id = k;
 			thr_data[k].K = K;
+			thr_data[k].K_COUNT = K_COUNT;
+			thr_data[k].K_DONE = K_DONE;
 			thr_data[k].SHIFT = SHIFT;
 			thr_data[k].STEP = STEP;
 			thr_data[k].S43 = S43;
 			thr_data[k].S47 = S47;
 			thr_data[k].S53 = S53;
 			thr_data[k].S59 = S59;
+			thr_data[k].iteration = iteration;
 			err = pthread_create(&thr[k], NULL, thr_func_sse2, &thr_data[k]);
 			if (err){
 				fprintf(stderr, "ERROR: pthread_create, code: %d\n", err);
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		// update BOINC fraction done every 2 sec and sleep the main thread
-		err = pthread_mutex_lock(&lock1);
-		if (err){
-			fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
-			exit(EXIT_FAILURE);
-		}
-		uint32_t now = current_n43;
-		err = pthread_mutex_unlock(&lock1);
-		if (err){
-			fprintf(stderr, "ERROR: pthread_mutex_unlock, code: %d\n", err);
-			exit(EXIT_FAILURE);
-		}
-		while(now < numn43s){
-			struct timespec sleep_time;
-			sleep_time.tv_sec = 1;
-			sleep_time.tv_nsec = 0;
-			nanosleep(&sleep_time,NULL);
-
-			time (&boinc_curr);
-			if( ((int)boinc_curr - (int)boinc_last) > 1 ){
-				dd = (double)(K_DONE*numn43s*10 + now + iteration*numn43s) * d;
-				Progress(dd);
-				boinc_last = boinc_curr;
-			}
-
-			err = pthread_mutex_lock(&lock1);
-			if (err){
-				fprintf(stderr, "ERROR: pthread_mutex_lock, code: %d\n", err);
-				exit(EXIT_FAILURE);
-			}
-			now = current_n43;
-			err = pthread_mutex_unlock(&lock1);
-			if (err){
-				fprintf(stderr, "ERROR: pthread_mutex_unlock, code: %d\n", err);
 				exit(EXIT_FAILURE);
 			}
 		}
