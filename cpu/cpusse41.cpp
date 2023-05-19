@@ -1,4 +1,4 @@
-/* cpuavx.cpp --
+/* cpusse41.cpp --
 
 */
 

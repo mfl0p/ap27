@@ -1,4 +1,4 @@
-/* cpuavx.cpp --
+/* cpusse2.cpp --
 
 */
 
@@ -10,52 +10,9 @@
 #include "cpuconst.h"
 
 
-uint64_t OKOK61[61];
-uint64_t OKOK67[67];
-uint64_t OKOK71[71];
-uint64_t OKOK73[73];
-uint64_t OKOK79[79];
-uint64_t OKOK83[83];
-uint64_t OKOK89[89];
-uint64_t OKOK97[97];
-uint64_t OKOK101[101];
-uint64_t OKOK103[103];
-uint64_t OKOK107[107];
-uint64_t OKOK109[109];
-uint64_t OKOK113[113];
-uint64_t OKOK127[127];
-uint64_t OKOK131[131];
-uint64_t OKOK137[137];
-uint64_t OKOK139[139];
-uint64_t OKOK149[149];
-uint64_t OKOK151[151];
-uint64_t OKOK157[157];
-uint64_t OKOK163[163];
-uint64_t OKOK167[167];
-uint64_t OKOK173[173];
-uint64_t OKOK179[179];
-uint64_t OKOK181[181];
-uint64_t OKOK191[191];
-uint64_t OKOK193[193];
-uint64_t OKOK197[197];
-uint64_t OKOK199[199];
-uint64_t OKOK211[211];
-uint64_t OKOK223[223];
-uint64_t OKOK227[227];
-uint64_t OKOK229[229];
-uint64_t OKOK233[233];
-uint64_t OKOK239[239];
-uint64_t OKOK241[241];
-uint64_t OKOK251[251];
-uint64_t OKOK257[257];
-uint64_t OKOK263[263];
-uint64_t OKOK269[269];
-uint64_t OKOK271[271];
-uint64_t OKOK277[277];
-
-
 // selects elements from two vectors based on a selection mask
 #define vec_sel(_X, _Y, _Z) _mm_xor_si128(_X, _mm_and_si128(_Z, _mm_xor_si128(_Y, _X)))
+
 
 #define MAKE_OK(_X) \
   for(j=0;j<_X;j++) \
@@ -63,28 +20,36 @@ uint64_t OKOK277[277];
   for(j=(_X-23);j<=_X;j++) \
     OK##_X[(j*(STEP%_X))%_X]=0;
 
+
 #define MAKE_OKOK(_X) \
-  for(j=0;j<_X;j++) \
-    OKOK##_X[j]=0; \
-  for(j=0;j<_X;j++) \
-    for(jj=0;jj<64;jj++) \
-      OKOK##_X[j]|=(((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj);
+  for(j=0;j<_X;j++){ \
+    sOKOK[0]=0; \
+    sOKOK[1]=0; \
+    for(jj=0;jj<64;jj++){ \
+      if(SHIFT < maxshift) \
+        sOKOK[0]|=(((uint64_t)OK##_X[(j+(jj+SHIFT)*MOD)%_X])<<jj); \
+      if(SHIFT+64 < maxshift) \
+        sOKOK[1]|=(((uint64_t)OK##_X[(j+(jj+SHIFT+64)*MOD)%_X])<<jj); \
+    } \
+    ixOKOK##_X[j] = _mm_load_si128( (__m128i*)sOKOK ); \
+  }
 
 
 void *thr_func_sse2(void *arg) {
 	thread_data_t *data = (thread_data_t *)arg;
 	int i43, i47, i53, i59;
-	uint64_t n, n43, n47, n53, n59, sito;
+	uint64_t n, n43, n47, n53, n59;
 	time_t boinc_last, boinc_curr;
 	double cc, dd;
+	uint64_t sito[2] __attribute__ ((aligned (16)));
  	int16_t rems[8] __attribute__ ((aligned (16)));
 	int16_t rrems[8] __attribute__ ((aligned (16)));
 	const __m128i ZERO128 = _mm_setzero_si128();
 
 	if(data->id == 0){
 		time(&boinc_last);
-		cc = (double)( data->K_DONE*numn43s*10 + data->iteration*numn43s );
-		dd = 1.0 / (double)( data->K_COUNT*numn43s*10 );		
+		cc = (double)( data->K_DONE*numn43s*5 + data->iteration*numn43s );
+		dd = 1.0 / (double)( data->K_COUNT*numn43s*5 );		
 	}
 
 	ckerr(pthread_mutex_lock(&lock1));
@@ -137,133 +102,138 @@ void *thr_func_sse2(void *arg) {
 							if(i59 < 35){
 								_mm_store_si128( (__m128i*)rems, r_numvec1);
 								_mm_store_si128( (__m128i*)rrems, r_numvec2);
-							}	
-							
-							if(sito = OKOK61[rems[0]]
-							& OKOK67[rems[1]]
-							& OKOK71[rems[2]]
-							& OKOK73[rems[3]]
-							& OKOK79[rems[4]]
-							& OKOK83[rems[5]]
-							& OKOK89[rems[6]]
-							& OKOK97[rems[7]])
-							if(sito&=(OKOK101[rrems[0]]
-							& OKOK103[rrems[1]]
-							& OKOK107[rrems[2]]
-							& OKOK109[rrems[3]]
-							& OKOK113[rrems[4]]
-							& OKOK127[rrems[5]]
-							& OKOK131[rrems[6]]
-							& OKOK137[rrems[7]]))
-							if(sito&=(OKOK139[REM(n59,139,8)]
-							& OKOK149[REM(n59,149,8)]
-							& OKOK151[REM(n59,151,8)]
-							& OKOK157[REM(n59,157,8)]
-							& OKOK163[REM(n59,163,8)]
-							& OKOK167[REM(n59,167,8)]
-							& OKOK173[REM(n59,173,8)]
-							& OKOK179[REM(n59,179,8)]
-							& OKOK181[REM(n59,181,8)]
-							& OKOK191[REM(n59,191,8)]
-							& OKOK193[REM(n59,193,8)]))
-							{
-								sito&=(OKOK197[REM(n59,197,8)]
-								& OKOK199[REM(n59,199,8)]
-								& OKOK211[REM(n59,211,8)]
-								& OKOK223[REM(n59,223,8)]
-								& OKOK227[REM(n59,227,8)]
-								& OKOK229[REM(n59,229,8)]
-								& OKOK233[REM(n59,233,8)]
-								& OKOK239[REM(n59,239,8)]
-								& OKOK241[REM(n59,241,8)]
-								& OKOK251[REM(n59,251,8)]
-								& OKOK257[REM(n59,257,9)]
-								& OKOK263[REM(n59,263,9)]
-								& OKOK269[REM(n59,269,9)]
-								& OKOK271[REM(n59,271,9)]
-								& OKOK277[REM(n59,277,9)]);
-								
-								while(sito){
-									int setbit = 63 - __builtin_clzll(sito);
-									uint64_t n = n59+( setbit + data->SHIFT )*MOD;
+							}								
 
-									if(n%7)
-									if(n%11)
-									if(n%13)
-									if(n%17)
-									if(n%19)
-									if(n%23)
-									if(OK281[n%281])
-									if(OK283[n%283])
-									if(OK293[n%293])
-									if(OK307[n%307])
-									if(OK311[n%311])
-									if(OK313[n%313])
-									if(OK317[n%317])
-									if(OK331[n%331])
-									if(OK337[n%337])
-									if(OK347[n%347])
-									if(OK349[n%349])
-									if(OK353[n%353])
-									if(OK359[n%359])
-									if(OK367[n%367])
-									if(OK373[n%373])
-									if(OK379[n%379])
-									if(OK383[n%383])
-									if(OK389[n%389])
-									if(OK397[n%397])
-									if(OK401[n%401])
-									if(OK409[n%409])
-									if(OK419[n%419])
-									if(OK421[n%421])
-									if(OK431[n%431])
-									if(OK433[n%433])
-									if(OK439[n%439])
-									if(OK443[n%443])
-									if(OK449[n%449])
-									if(OK457[n%457])
-									if(OK461[n%461])
-									if(OK463[n%463])
-									if(OK467[n%467])
-									if(OK479[n%479])
-									if(OK487[n%487])
-									if(OK491[n%491])
-									if(OK499[n%499])
-									if(OK503[n%503])
-									if(OK509[n%509])
-									if(OK521[n%521])
-									if(OK523[n%523])
-									if(OK541[n%541]){
-										int k = 0;
-										uint64_t m = n + data->STEP * 5;
-										while(PrimeQ(m)){
-											k++;
-											m += data->STEP;
-										}
-										
-										if(k>=10){
-											m = n + data->STEP * 4;
-											uint64_t mstart = m;
+							__m128i isito = _mm_and_si128( ixOKOK61[rems[0]], ixOKOK67[rems[1]] );
+							isito = _mm_and_si128( isito, ixOKOK71[rems[2]] );
+							isito = _mm_and_si128( isito, ixOKOK73[rems[3]] );
+							isito = _mm_and_si128( isito, ixOKOK79[rems[4]] );
+							isito = _mm_and_si128( isito, ixOKOK83[rems[5]] );
+							isito = _mm_and_si128( isito, ixOKOK89[rems[6]] );
+							isito = _mm_and_si128( isito, ixOKOK97[rems[7]] );
+							isito = _mm_and_si128( isito, ixOKOK101[rrems[0]] );
+							isito = _mm_and_si128( isito, ixOKOK103[rrems[1]] );
+							isito = _mm_and_si128( isito, ixOKOK107[rrems[2]] );
+							isito = _mm_and_si128( isito, ixOKOK109[rrems[3]] );
+							isito = _mm_and_si128( isito, ixOKOK113[rrems[4]] );
+							isito = _mm_and_si128( isito, ixOKOK127[rrems[5]] );
+							isito = _mm_and_si128( isito, ixOKOK131[rrems[6]] );
+							isito = _mm_and_si128( isito, ixOKOK137[rrems[7]] );
+							_mm_store_si128( (__m128i*)sito, isito );
+							if( sito[0] || sito[1] ){
+								isito = _mm_and_si128( isito, ixOKOK139[REM(n59,139,8)] );
+								isito = _mm_and_si128( isito, ixOKOK149[REM(n59,149,8)] );
+								isito = _mm_and_si128( isito, ixOKOK151[REM(n59,151,8)] );
+								isito = _mm_and_si128( isito, ixOKOK157[REM(n59,157,8)] );
+								isito = _mm_and_si128( isito, ixOKOK163[REM(n59,163,8)] );
+								isito = _mm_and_si128( isito, ixOKOK167[REM(n59,167,8)] );
+								isito = _mm_and_si128( isito, ixOKOK173[REM(n59,173,8)] );
+								isito = _mm_and_si128( isito, ixOKOK179[REM(n59,179,8)] );
+								isito = _mm_and_si128( isito, ixOKOK181[REM(n59,181,8)] );
+								isito = _mm_and_si128( isito, ixOKOK191[REM(n59,191,8)] );
+								isito = _mm_and_si128( isito, ixOKOK193[REM(n59,193,8)] );
+								isito = _mm_and_si128( isito, ixOKOK197[REM(n59,197,8)] );
+								isito = _mm_and_si128( isito, ixOKOK199[REM(n59,199,8)] );
+								_mm_store_si128( (__m128i*)sito, isito );
+							if( sito[0] || sito[1] ){
+								isito = _mm_and_si128( isito, ixOKOK211[REM(n59,211,8)] );
+								isito = _mm_and_si128( isito, ixOKOK223[REM(n59,223,8)] );
+								isito = _mm_and_si128( isito, ixOKOK227[REM(n59,227,8)] );
+								isito = _mm_and_si128( isito, ixOKOK229[REM(n59,229,8)] );
+								isito = _mm_and_si128( isito, ixOKOK233[REM(n59,233,8)] );
+								isito = _mm_and_si128( isito, ixOKOK239[REM(n59,239,8)] );
+								isito = _mm_and_si128( isito, ixOKOK241[REM(n59,241,8)] );
+								isito = _mm_and_si128( isito, ixOKOK251[REM(n59,251,8)] );
+								isito = _mm_and_si128( isito, ixOKOK257[REM(n59,257,9)] );
+								isito = _mm_and_si128( isito, ixOKOK263[REM(n59,263,9)] );
+								isito = _mm_and_si128( isito, ixOKOK269[REM(n59,269,9)] );
+								isito = _mm_and_si128( isito, ixOKOK271[REM(n59,271,9)] );
+								isito = _mm_and_si128( isito, ixOKOK277[REM(n59,277,9)] );
+								_mm_store_si128( (__m128i*)sito, isito );
+							if( sito[0] || sito[1] ){
+								for(int ii=0;ii<2;++ii){
+									while(sito[ii]){
+										int setbit = 63 - __builtin_clzll(sito[ii]);
+										uint64_t n = n59+( setbit + data->SHIFT + (64*ii) )*MOD;
+
+										if(n%7)
+										if(n%11)
+										if(n%13)
+										if(n%17)
+										if(n%19)
+										if(n%23)
+										if(OK281[n%281])
+										if(OK283[n%283])
+										if(OK293[n%293])
+										if(OK307[n%307])
+										if(OK311[n%311])
+										if(OK313[n%313])
+										if(OK317[n%317])
+										if(OK331[n%331])
+										if(OK337[n%337])
+										if(OK347[n%347])
+										if(OK349[n%349])
+										if(OK353[n%353])
+										if(OK359[n%359])
+										if(OK367[n%367])
+										if(OK373[n%373])
+										if(OK379[n%379])
+										if(OK383[n%383])
+										if(OK389[n%389])
+										if(OK397[n%397])
+										if(OK401[n%401])
+										if(OK409[n%409])
+										if(OK419[n%419])
+										if(OK421[n%421])
+										if(OK431[n%431])
+										if(OK433[n%433])
+										if(OK439[n%439])
+										if(OK443[n%443])
+										if(OK449[n%449])
+										if(OK457[n%457])
+										if(OK461[n%461])
+										if(OK463[n%463])
+										if(OK467[n%467])
+										if(OK479[n%479])
+										if(OK487[n%487])
+										if(OK491[n%491])
+										if(OK499[n%499])
+										if(OK503[n%503])
+										if(OK509[n%509])
+										if(OK521[n%521])
+										if(OK523[n%523])
+										if(OK541[n%541]){
+											int k = 0;
+											uint64_t m = n + data->STEP * 5;
 											while(PrimeQ(m)){
 												k++;
-												m -= data->STEP;
-												if(m > mstart) break;
+												m += data->STEP;
+											}
+											
+											if(k>=10){
+												m = n + data->STEP * 4;
+												uint64_t mstart = m;
+												while(PrimeQ(m)){
+													k++;
+													m -= data->STEP;
+													if(m > mstart) break;
+												}
+											}
+
+											if(k>=10){
+												uint64_t first_term = m + data->STEP;
+
+												ckerr(pthread_mutex_lock(&lock2));
+												ReportSolution(k, data->K, first_term);
+												++totalaps;
+												ckerr(pthread_mutex_unlock(&lock2));
 											}
 										}
-
-										if(k>=10){
-											uint64_t first_term = m + data->STEP;
-
-											ckerr(pthread_mutex_lock(&lock2));
-											ReportSolution(k, data->K, first_term);
-											++totalaps;
-											ckerr(pthread_mutex_unlock(&lock2));
-										}
+																								
+										sito[ii] ^= ((uint64_t)1) << setbit; // toggle bit off
 									}
-																							
-									sito ^= ((uint64_t)1) << setbit; // toggle bit off
 								}
-							}
+							}}}
 
 							n59 += data->S59;
 
@@ -285,7 +255,7 @@ void *thr_func_sse2(void *arg) {
 							r_numvec1 = vec_sel(r_numvec1, subvec, _mm_cmpgt_epi16(r_numvec1, numvec2_1) );
 
 							subvec = _mm_sub_epi16(r_numvec2, numvec1_2);
-							r_numvec2 = vec_sel(r_numvec2, subvec, _mm_cmpgt_epi16(r_numvec2, numvec2_2) );
+							r_numvec2 = vec_sel(r_numvec2, subvec, _mm_cmpgt_epi16(r_numvec2, numvec2_2) );						
 						   
 						}     
 						n53 += data->S53;
@@ -323,6 +293,7 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	uint64_t S31, S37, S41, S43, S47, S53, S59;
 	int j,jj,k;
 	int err;
+	uint64_t sOKOK[2] __attribute__ ((aligned (16)));
 
 	time_t start_time, finish_time;
 
@@ -467,7 +438,7 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 	int iteration = 0;
 
 	// 10 shift
-	for(SHIFT=startSHIFT; SHIFT<maxshift; SHIFT+=64){
+	for(SHIFT=startSHIFT; SHIFT<maxshift; SHIFT+=128){
 
 		MAKE_OKOK(61);
 		MAKE_OKOK(67);
@@ -557,7 +528,6 @@ void Search_sse2(int K, int startSHIFT, int K_COUNT, int K_DONE, int threads)
 		time(&finish_time);
 		printf("Computation of K: %d complete in %d seconds\n", K, (int)finish_time - (int)start_time);
 	}
-
 
 
 }
