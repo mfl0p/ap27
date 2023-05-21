@@ -184,9 +184,15 @@ extern pthread_mutex_t lock1;
 /////////////////////////////
 
 ///////////////////////////////////
-// lock used for reporting results
-extern uint32_t totalaps;
+// lock used for writing results to file
 extern pthread_mutex_t lock2;
+///////////////////////////////////
+
+///////////////////////////////////
+// lock used for checksum and ap count
+extern uint32_t totalaps;
+extern uint32_t cksum;
+extern pthread_mutex_t lock3;
 ///////////////////////////////////
 
 
@@ -198,7 +204,7 @@ typedef struct _thread_data_t {
 
 // located in AP26.cpp
 extern void Progress(double prog);
-extern void ReportSolution(int AP_Length, int difference, uint64_t First_Term);
+extern void ReportSolution(int AP_Length, int difference, uint64_t First_Term, uint32_t & checksum);
 extern bool PrimeQ(uint64_t N);
 extern int boinc_standalone(void);
 extern void ckerr(int err);
@@ -206,6 +212,8 @@ extern void ckerr(int err);
 
 #define thread_range 50
 #define numn43s	10840
+#define MAXINTV 2000000000
+
 
 #define PRIM23	UINT64_C(223092870)
 #define PRIME1	29

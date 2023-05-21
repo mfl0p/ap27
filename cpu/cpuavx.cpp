@@ -53,6 +53,8 @@ void *thr_func_avx(void *arg) {
  	int16_t rems[8] __attribute__ ((aligned (16)));
 	int16_t rrems[8] __attribute__ ((aligned (16)));
 	const __m128i ZERO128 = _mm_setzero_si128();
+	uint32_t checksum = 0;
+	uint32_t apcount = 0;	
 
 	if(data->id == 0){
 		time(&boinc_last);
@@ -229,10 +231,8 @@ void *thr_func_avx(void *arg) {
 											if(k>=10){
 												uint64_t first_term = m + data->STEP;
 
-												ckerr(pthread_mutex_lock(&lock2));
-												ReportSolution(k, data->K, first_term);
-												++totalaps;
-												ckerr(pthread_mutex_unlock(&lock2));
+												ReportSolution(k, data->K, first_term, checksum);
+												++apcount;
 											}
 										}
 																								
@@ -283,6 +283,18 @@ void *thr_func_avx(void *arg) {
 		current_n43 = stop;
 		ckerr(pthread_mutex_unlock(&lock1));
 	}
+	
+	
+	// add this threads checksum and ap count to total
+	ckerr(pthread_mutex_lock(&lock3));
+	uint64_t total = cksum;
+	total += checksum;
+	if(total > MAXINTV){
+		total -= MAXINTV;
+	}
+	cksum = total;
+	totalaps += apcount;
+	ckerr(pthread_mutex_unlock(&lock3));		
 
 	pthread_exit(NULL);
 

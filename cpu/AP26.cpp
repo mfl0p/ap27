@@ -33,7 +33,6 @@ static int KMIN, KMAX, K_DONE, K_COUNT;
 static FILE *results_file = NULL;
 uint64_t *n43_h;
 bool write_state_a_next;
-uint32_t cksum;
 uint64_t last_trickle;
 time_t last_ckpt;
 
@@ -45,11 +44,16 @@ pthread_mutex_t lock1;
 /////////////////////////////
 
 ///////////////////////////////////
-// lock used for reporting results
-uint32_t totalaps;
+// lock used for writing results to file
 pthread_mutex_t lock2;
 ///////////////////////////////////
 
+///////////////////////////////////
+// lock used for checksum and ap count
+uint32_t totalaps;
+uint32_t cksum;
+pthread_mutex_t lock3;
+///////////////////////////////////
 
 
 void handle_trickle_up(){
@@ -509,16 +513,16 @@ int validate_ap26(int k, int d, uint64_t f)
 // Bryan Little - added to CPU code 6-9-2016
 // Changed function to check ALL solutions for validity, not just solutions >= MINIMUM_AP_LENGTH_TO_REPORT
 // CPU does a prp base 2 check only. It will sometimes report an AP with a base 2 probable prime.
-void ReportSolution(int AP_Length, int difference, uint64_t First_Term)
+void ReportSolution(int AP_Length, int difference, uint64_t First_Term, uint32_t & checksum)
 {
 
 	int i;
 
 	/*	add each AP10+ first_term mod 1000 and that AP's length to checksum	*/
-	cksum += First_Term % 1000;
-	cksum += AP_Length;
-	if(cksum > MAXINTV){
-		cksum -= MAXINTV;
+	checksum += First_Term % 1000;
+	checksum += AP_Length;
+	if(checksum > MAXINTV){
+		checksum -= MAXINTV;
 	}
 
 	i = validate_ap26(AP_Length,difference,First_Term);
@@ -538,13 +542,15 @@ void ReportSolution(int AP_Length, int difference, uint64_t First_Term)
 
 		// Even though this AP is not valid, it may contain an AP that is.
 		/* Check leading terms */
-		ReportSolution(i,difference,First_Term);
+		ReportSolution(i,difference,First_Term,checksum);
 
 		/* Check trailing terms */
-		ReportSolution(AP_Length-(i+1),difference,First_Term+(int64_t)(i+1)*difference*2*3*5*7*11*13*17*19*23);
+		ReportSolution(AP_Length-(i+1),difference,First_Term+(int64_t)(i+1)*difference*2*3*5*7*11*13*17*19*23,checksum);
 		return;
 	}
 	else if (AP_Length >= MINIMUM_AP_LENGTH_TO_REPORT){
+		
+		ckerr(pthread_mutex_lock(&lock2));
 
 		if (results_file == NULL)
 			results_file = my_fopen(RESULTS_FILENAME,"a");
@@ -562,6 +568,9 @@ void ReportSolution(int AP_Length, int difference, uint64_t First_Term)
 			fprintf(stderr,"Cannot write to %s !!!\n",RESULTS_FILENAME);
 			exit(EXIT_FAILURE);
 		}
+		
+		ckerr(pthread_mutex_unlock(&lock2));
+
 	}
 	
 }
@@ -624,6 +633,8 @@ int main(int argc, char *argv[])
 	
 	ckerr(pthread_mutex_init(&lock1, NULL));
 	ckerr(pthread_mutex_init(&lock2, NULL));
+	ckerr(pthread_mutex_init(&lock3, NULL));
+
 	
 	fprintf(stderr, "AP26 CPU 10-shift search version %s by Bryan Little\n",VERS);
 	fprintf(stderr, "Compiled " __DATE__ " with GCC " __VERSION__ "\n");
@@ -907,6 +918,8 @@ int main(int argc, char *argv[])
 	
 	ckerr(pthread_mutex_destroy(&lock1));
 	ckerr(pthread_mutex_destroy(&lock2));
+	ckerr(pthread_mutex_destroy(&lock3));
+
 
 	boinc_finish(EXIT_SUCCESS);
 	return EXIT_SUCCESS;

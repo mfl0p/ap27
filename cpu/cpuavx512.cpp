@@ -189,7 +189,7 @@ __m512i xxOKOK277[277];
   }
   
   
-void check_n(uint64_t n, uint64_t STEP, int K){
+void check_n(uint64_t n, uint64_t STEP, int K, uint32_t & checksum, uint32_t & apcount){
 
 	if(n%7)
 	if(n%11)
@@ -259,10 +259,8 @@ void check_n(uint64_t n, uint64_t STEP, int K){
 		if(k>=10){
 			uint64_t first_term = m + STEP;
 
-			ckerr(pthread_mutex_lock(&lock2));
-			ReportSolution(k, K, first_term);
-			++totalaps;
-			ckerr(pthread_mutex_unlock(&lock2));
+			ReportSolution(k, K, first_term, checksum);
+			++apcount;
 		}
 	}
 	
@@ -282,6 +280,8 @@ void *thr_func_avx512(void *arg) {
 	const __m256i ZERO256 = _mm256_setzero_si256();
 	const __m512i ZERO512 = _mm512_setzero_si512();
 	__mmask16 m;
+	uint32_t checksum = 0;
+	uint32_t apcount = 0;
 
 	if(data->id == 0){
 		time(&boinc_last);
@@ -389,7 +389,7 @@ void *thr_func_avx512(void *arg) {
 									while(sito[ii]){
 										int setbit = 63 - __builtin_clzll(sito[ii]);
 										uint64_t n = n59+( setbit + data->SHIFT + (64*ii) )*MOD;
-										check_n(n, data->STEP, data->K);																											
+										check_n(n, data->STEP, data->K, checksum, apcount);																											
 										sito[ii] ^= ((uint64_t)1) << setbit; // toggle bit off
 									}
 								}
@@ -445,13 +445,13 @@ void *thr_func_avx512(void *arg) {
 								while(sitosm[0]){
 									int setbit = 63 - __builtin_clzll(sitosm[0]);
 									uint64_t n = n59+( setbit + data->SHIFT + 512 )*MOD;
-									check_n(n, data->STEP, data->K);																											
+									check_n(n, data->STEP, data->K, checksum, apcount);																											
 									sitosm[0] ^= ((uint64_t)1) << setbit; // toggle bit off
 								}
 								while(sitosm[1]){
 									int setbit = 63 - __builtin_clzll(sitosm[1]);
 									uint64_t n = n59+( setbit + data->SHIFT + 576 )*MOD;
-									check_n(n, data->STEP, data->K);																											
+									check_n(n, data->STEP, data->K, checksum, apcount);																											
 									sitosm[1] ^= ((uint64_t)1) << setbit; // toggle bit off
 								}								
 
@@ -493,6 +493,17 @@ void *thr_func_avx512(void *arg) {
 		current_n43 = stop;
 		ckerr(pthread_mutex_unlock(&lock1));
 	}
+	
+	// add this threads checksum and ap count to total
+	ckerr(pthread_mutex_lock(&lock3));
+	uint64_t total = cksum;
+	total += checksum;
+	if(total > MAXINTV){
+		total -= MAXINTV;
+	}
+	cksum = total;
+	totalaps += apcount;
+	ckerr(pthread_mutex_unlock(&lock3));	
 
 	pthread_exit(NULL);
 
